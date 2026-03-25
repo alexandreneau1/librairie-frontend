@@ -1,12 +1,57 @@
-async function getLivre(id) {
-  const res = await fetch(`http://localhost:3001/livres/${id}`, { cache: 'no-store' })
-  if (!res.ok) return null
-  return res.json()
-}
+'use client'
 
-export default async function LivrePage({ params }) {
-  const { id } = await params
-  const livre = await getLivre(id)
+import { useState, useEffect } from 'react'
+
+export default function LivrePage({ params }) {
+  const [livre, setLivre] = useState(null)
+  const [livreId, setLivreId] = useState(null)
+  const [afficherFormulaire, setAfficherFormulaire] = useState(false)
+  const [nom, setNom] = useState('')
+  const [email, setEmail] = useState('')
+  const [confirmation, setConfirmation] = useState(false)
+  const [erreur, setErreur] = useState('')
+  const [chargement, setChargement] = useState(false)
+
+  useEffect(() => {
+    params.then(p => {
+      setLivreId(p.id)
+      fetch(`http://localhost:3001/livres/${p.id}`, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(data => setLivre(data))
+    })
+  }, [])
+
+  const handleReservation = async function() {
+    if (!nom || !email) {
+      setErreur('Veuillez remplir tous les champs.')
+      return
+    }
+    const emailValide = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    if (!emailValide) {
+      setErreur('Veuillez saisir une adresse email valide (exemple : nom@domaine.fr).')
+      return
+    }
+    setChargement(true)
+    setErreur('')
+    try {
+      const res = await fetch('http://localhost:3001/reservations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ livre_id: livreId, nom, email })
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setErreur(data.message || 'Une erreur est survenue.')
+        setChargement(false)
+        return
+      }
+      setConfirmation(true)
+      setAfficherFormulaire(false)
+    } catch (err) {
+      setErreur('Impossible de contacter le serveur.')
+    }
+    setChargement(false)
+  }
 
   if (!livre) {
     return (
@@ -15,8 +60,7 @@ export default async function LivrePage({ params }) {
           <h1 style={{ color: 'white', fontSize: '32px', fontWeight: '700', margin: 0 }}>Ma Librairie</h1>
         </header>
         <main style={{ maxWidth: '800px', margin: '80px auto', padding: '0 24px', textAlign: 'center' }}>
-          <p style={{ color: '#999', fontSize: '18px' }}>Livre non trouvé.</p>
-          <a href="/" style={{ color: '#1a3d2b', fontWeight: '600' }}>Retour au catalogue</a>
+          <p style={{ color: '#999' }}>Chargement...</p>
         </main>
       </div>
     )
@@ -60,19 +104,101 @@ export default async function LivrePage({ params }) {
             <p style={{ fontSize: '16px', color: '#444', margin: 0 }}>{livre.isbn}</p>
           </div>
 
-          <button style={{
-            backgroundColor: '#1a3d2b',
-            color: 'white',
-            border: 'none',
-            borderRadius: '10px',
-            padding: '14px 32px',
-            fontSize: '16px',
-            fontWeight: '600',
-            cursor: 'pointer',
-            width: '100%'
-          }}>
-            Réserver ce livre
-          </button>
+          {confirmation && (
+            <div style={{ backgroundColor: '#e8f5e9', borderRadius: '10px', padding: '20px', textAlign: 'center' }}>
+              <p style={{ color: '#1a3d2b', fontWeight: '600', margin: 0 }}>
+                Réservation confirmée ! Nous vous contacterons à {email}.
+              </p>
+            </div>
+          )}
+
+          {!confirmation && !afficherFormulaire && (
+            <button
+              onClick={() => setAfficherFormulaire(true)}
+              style={{
+                backgroundColor: livre.stock === 0 ? '#ccc' : '#1a3d2b',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                padding: '14px 32px',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: livre.stock === 0 ? 'not-allowed' : 'pointer',
+                width: '100%'
+              }}
+              disabled={livre.stock === 0}>
+              {livre.stock === 0 ? 'Stock épuisé' : 'Réserver ce livre'}
+            </button>
+          )}
+
+          {afficherFormulaire && (
+            <div style={{ marginTop: '8px' }}>
+              <input
+                type="text"
+                placeholder="Votre nom"
+                value={nom}
+                onChange={e => setNom(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  fontSize: '15px',
+                  marginBottom: '12px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              <input
+                type="email"
+                placeholder="Votre email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  fontSize: '15px',
+                  marginBottom: '12px',
+                  boxSizing: 'border-box'
+                }}
+              />
+              {erreur && (
+                <p style={{ color: '#e53935', fontSize: '14px', marginBottom: '12px' }}>{erreur}</p>
+              )}
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button
+                  onClick={handleReservation}
+                  disabled={chargement}
+                  style={{
+                    backgroundColor: chargement ? '#aaa' : '#1a3d2b',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '10px',
+                    padding: '12px 24px',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    cursor: chargement ? 'not-allowed' : 'pointer',
+                    flex: 1
+                  }}>
+                  {chargement ? 'Envoi en cours...' : 'Confirmer la réservation'}
+                </button>
+                <button
+                  onClick={() => setAfficherFormulaire(false)}
+                  style={{
+                    backgroundColor: 'transparent',
+                    color: '#999',
+                    border: '1px solid #ddd',
+                    borderRadius: '10px',
+                    padding: '12px 24px',
+                    fontSize: '15px',
+                    cursor: 'pointer'
+                  }}>
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
