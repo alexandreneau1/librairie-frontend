@@ -9,10 +9,11 @@ export default function Home() {
   useEffect(() => {
     const delai = setTimeout(() => {
       const recherchePropre = recherche
-  .toLowerCase()
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .replace(/[^a-z0-9 ]/g, '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9 ]/g, '')
+        .replace(/\s+/g, '')
       fetch(`http://localhost:3001/livres${recherchePropre ? '?titre=' + encodeURIComponent(recherchePropre) : ''}`)
         .then(res => res.json())
         .then(data => setLivres(data))
@@ -22,48 +23,65 @@ export default function Home() {
 
   return (
     <div style={{ backgroundColor: '#f9f6f1', minHeight: '100vh' }}>
-      <header style={{ backgroundColor: '#1a3d2b', padding: '24px 48px' }}>
-        <h1 style={{ color: 'white', fontSize: '28px', fontWeight: '600', margin: 0 }}>
+      <header style={{ backgroundColor: '#1a3d2b', padding: '32px 48px', textAlign: 'center' }}>
+        <h1 style={{ color: 'white', fontSize: '32px', fontWeight: '700', margin: 0, letterSpacing: '1px' }}>
           Ma Librairie
         </h1>
-        <p style={{ color: '#a8d5b5', margin: '4px 0 0', fontSize: '14px' }}>
+        <p style={{ color: '#a8d5b5', margin: '8px 0 0', fontSize: '15px' }}>
           Découvrez notre catalogue
         </p>
       </header>
 
-      <main style={{ maxWidth: '960px', margin: '0 auto', padding: '40px 24px' }}>
+      <main style={{ maxWidth: '1100px', margin: '0 auto', padding: '48px 24px', boxSizing: 'border-box' }}>
         <input
           type="text"
-          placeholder="Rechercher un livre..."
+          placeholder="Rechercher un livre par titre, auteur..."
           value={recherche}
           onChange={e => setRecherche(e.target.value)}
           style={{
             width: '100%',
-            padding: '12px 16px',
-            borderRadius: '8px',
+            padding: '14px 20px',
+            borderRadius: '10px',
             border: '1px solid #ddd',
             fontSize: '16px',
-            marginBottom: '32px',
-            boxSizing: 'border-box'
+            marginBottom: '40px',
+            boxSizing: 'border-box',
+            backgroundColor: 'white',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
           }}
         />
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '24px' }}>
+        {livres.length === 0 && recherche && (
+          <p style={{ textAlign: 'center', color: '#999', marginTop: '40px' }}>
+            Aucun livre trouvé pour "{recherche}"
+          </p>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '28px' }}>
           {livres.map((livre) => (
-            <div key={livre.id} style={{
-              backgroundColor: 'white',
-              borderRadius: '10px',
-              padding: '20px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-              borderTop: '4px solid #1a3d2b'
-            }}>
-              <h2 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '6px' }}>{livre.titre}</h2>
-              <p style={{ fontSize: '13px', color: '#888', marginBottom: '16px' }}>{livre.auteur}</p>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '18px', fontWeight: '700', color: '#1a3d2b' }}>{livre.prix} €</span>
-                <span style={{ fontSize: '12px', color: '#aaa' }}>Stock : {livre.stock}</span>
+            <a key={livre.id} href={`/livres/${livre.id}`} style={{ textDecoration: 'none' }}>
+              <div style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '24px',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.07)',
+                borderTop: '4px solid #1a3d2b',
+                cursor: 'pointer',
+                transition: 'transform 0.15s ease'
+              }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-3px)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+              >
+                <h2 style={{ fontSize: '17px', fontWeight: '600', marginBottom: '6px', color: '#1a1a1a' }}>{livre.titre}</h2>
+                <p style={{ fontSize: '14px', color: '#888', marginBottom: '20px' }}>{livre.auteur}</p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '20px', fontWeight: '700', color: '#1a3d2b' }}>{livre.prix} €</span>
+                  <span style={{ fontSize: '12px', color: '#bbb', backgroundColor: '#f5f5f5', padding: '3px 8px', borderRadius: '20px' }}>
+                    Stock : {livre.stock}
+                  </span>
+                </div>
               </div>
-            </div>
+            </a>
           ))}
         </div>
       </main>
