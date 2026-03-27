@@ -35,8 +35,9 @@ export default function Home() {
             </div>
             <nav style={{ display: 'flex', gap: '32px' }}>
               <a href="#catalogue" style={{ color: '#a8d5b5', textDecoration: 'none', fontSize: '14px', letterSpacing: '0.5px' }}>Catalogue</a>
-              <a href="#click-collect" style={{ color: '#a8d5b5', textDecoration: 'none', fontSize: '14px', letterSpacing: '0.5px' }}>Click and Collect</a>
+              <a href="/click-collect" style={{ color: '#a8d5b5', textDecoration: 'none', fontSize: '14px', letterSpacing: '0.5px' }}>Click and Collect</a>
               <a href="#infos" style={{ color: '#a8d5b5', textDecoration: 'none', fontSize: '14px', letterSpacing: '0.5px' }}>Infos pratiques</a>
+              <a href="/compte/connexion" style={{ color: '#a8d5b5', textDecoration: 'none', fontSize: '14px', letterSpacing: '0.5px' }}>Mon compte</a>
             </nav>
           </div>
 
@@ -93,7 +94,7 @@ export default function Home() {
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '28px' }}>
-          {livres.map((livre) => (
+          {livres.map((livre: any) => (
             <a key={livre.id} href={'/livres/' + livre.id} style={{ textDecoration: 'none' }}>
               <div
                 style={{ backgroundColor: 'white', borderRadius: '12px', padding: '28px 24px', boxShadow: '0 2px 10px rgba(0,0,0,0.06)', borderTop: '4px solid #1a3d2b', cursor: 'pointer', transition: 'transform 0.15s ease' }}
