@@ -15,6 +15,7 @@ export default function Dashboard() {
   const [isbn, setIsbn] = useState('')
   const [prix, setPrix] = useState('')
   const [stock, setStock] = useState('')
+  const [genre, setGenre] = useState('')
 
   const token = function() { return localStorage.getItem('token') }
 
@@ -62,6 +63,7 @@ export default function Dashboard() {
       setIsbn(livre.isbn)
       setPrix(livre.prix)
       setStock(livre.stock)
+      setGenre(livre.genre || '')
     } else {
       setLivreEdite(null)
       setTitre('')
@@ -69,12 +71,13 @@ export default function Dashboard() {
       setIsbn('')
       setPrix('')
       setStock('')
+      setGenre('')
     }
     setFormulaireLivre(true)
   }
 
   const sauvegarderLivre = async function() {
-    const body = JSON.stringify({ titre, auteur, isbn, prix: parseFloat(prix), stock: parseInt(stock) })
+    const body = JSON.stringify({ titre, auteur, isbn, prix: parseFloat(prix), stock: parseInt(stock), genre })
     const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() }
     if (livreEdite) {
       await fetch('http://localhost:3001/livres/' + livreEdite.id, { method: 'PUT', headers, body })
@@ -123,6 +126,12 @@ export default function Dashboard() {
     const s = styles[statut] || { backgroundColor: '#f5f5f5', color: '#666' }
     return { ...s, padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }
   }
+
+  const GENRES = [
+    'Roman', 'Policier', 'Science-fiction', 'Fantasy', 'Biographie',
+    'Histoire', 'Essai', 'Jeunesse', 'Bande dessinée', 'Poésie',
+    'Thriller', 'Romance', 'Développement personnel', 'Philosophie', 'Autre'
+  ]
 
   return (
     <div style={{ backgroundColor: '#f9f6f1', minHeight: '100vh' }}>
@@ -264,9 +273,27 @@ export default function Dashboard() {
                   {[['Titre', titre, setTitre], ['Auteur', auteur, setAuteur], ['ISBN', isbn, setIsbn], ['Prix', prix, setPrix], ['Stock', stock, setStock]].map(([label, val, setter]) => (
                     <div key={label}>
                       <label style={{ fontSize: '12px', color: '#999', display: 'block', marginBottom: '4px' }}>{label}</label>
-                      <input type="text" value={val} onChange={e => setter(e.target.value)} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box' }} />
+                      <input
+                        type="text"
+                        value={val}
+                        onChange={e => setter(e.target.value)}
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box' }}
+                      />
                     </div>
                   ))}
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#999', display: 'block', marginBottom: '4px' }}>Genre</label>
+                    <select
+                      value={genre}
+                      onChange={e => setGenre(e.target.value)}
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', backgroundColor: 'white' }}
+                    >
+                      <option value="">— Sélectionner un genre —</option>
+                      {GENRES.map(g => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
                   <button onClick={sauvegarderLivre} style={{ backgroundColor: '#1a3d2b', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
@@ -283,7 +310,7 @@ export default function Dashboard() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f5f5f5' }}>
-                    {['Titre', 'Auteur', 'ISBN', 'Prix', 'Stock', 'Actions'].map(h => (
+                    {['Titre', 'Auteur', 'Genre', 'ISBN', 'Prix', 'Stock', 'Actions'].map(h => (
                       <th key={h} style={{ padding: '14px 20px', textAlign: 'left', fontSize: '13px', color: '#666', fontWeight: '600' }}>{h}</th>
                     ))}
                   </tr>
@@ -293,6 +320,13 @@ export default function Dashboard() {
                     <tr key={l.id} style={{ borderTop: '1px solid #f0f0f0', backgroundColor: i % 2 === 0 ? 'white' : '#fafafa' }}>
                       <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: '500' }}>{l.titre}</td>
                       <td style={{ padding: '14px 20px', fontSize: '14px', color: '#666' }}>{l.auteur}</td>
+                      <td style={{ padding: '14px 20px', fontSize: '14px', color: '#666' }}>
+                        {l.genre ? (
+                          <span style={{ backgroundColor: '#f0f7f4', color: '#1a3d2b', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>{l.genre}</span>
+                        ) : (
+                          <span style={{ color: '#ccc', fontSize: '13px' }}>—</span>
+                        )}
+                      </td>
                       <td style={{ padding: '14px 20px', fontSize: '14px', color: '#666' }}>{l.isbn}</td>
                       <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: '600', color: '#1a3d2b' }}>{l.prix} €</td>
                       <td style={{ padding: '14px 20px', fontSize: '14px' }}>{l.stock}</td>
