@@ -16,6 +16,13 @@ export default function Dashboard() {
   const [prix, setPrix] = useState('')
   const [stock, setStock] = useState('')
   const [genre, setGenre] = useState('')
+  const [description, setDescription] = useState('')
+  const [editeur, setEditeur] = useState('')
+  const [collection, setCollection] = useState('')
+  const [datePublication, setDatePublication] = useState('')
+  const [urlGoodreads, setUrlGoodreads] = useState('')
+  const [rechercheLivre, setRechercheLivre] = useState(false)
+  const [apercuCouverture, setApercuCouverture] = useState('')
 
   const token = function() { return localStorage.getItem('token') }
 
@@ -36,6 +43,35 @@ export default function Dashboard() {
     if (!token()) { window.location.href = '/admin'; return }
     chargerDonnees()
   }, [])
+
+  const rechercherGoogleBooks = async function() {
+  if (!isbn) return
+  setRechercheLivre(true)
+  try {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_BOOKS_API_KEY
+    const res = await fetch('https://www.googleapis.com/books/v1/volumes?q=isbn:' + isbn + '&key=' + apiKey)
+    const data = await res.json()
+    if (data.items && data.items.length > 0) {
+      const info = data.items[0].volumeInfo
+      setTitre(info.title || '')
+      setAuteur(info.authors ? info.authors.join(', ') : '')
+      setDescription(info.description || '')
+      setEditeur(info.publisher || '')
+      setDatePublication(info.publishedDate || '')
+      if (info.imageLinks && info.imageLinks.thumbnail) {
+        setApercuCouverture(info.imageLinks.thumbnail.replace('http://', 'https://'))
+      } else {
+        setApercuCouverture('')
+      }
+    } else {
+      alert('Aucun livre trouve pour cet ISBN')
+    }
+  } catch (err) {
+    alert('Erreur lors de la recherche Google Books')
+  } finally {
+    setRechercheLivre(false)
+  }
+}
 
   const changerStatutReservation = async function(id, statut) {
     await fetch('http://localhost:3001/reservations/' + id + '/statut', {
@@ -58,12 +94,18 @@ export default function Dashboard() {
   const ouvrirFormulaire = function(livre) {
     if (livre) {
       setLivreEdite(livre)
-      setTitre(livre.titre)
-      setAuteur(livre.auteur)
-      setIsbn(livre.isbn)
-      setPrix(livre.prix)
-      setStock(livre.stock)
+      setTitre(livre.titre || '')
+      setAuteur(livre.auteur || '')
+      setIsbn(livre.isbn || '')
+      setPrix(livre.prix || '')
+      setStock(livre.stock || '')
       setGenre(livre.genre || '')
+      setDescription(livre.description || '')
+      setEditeur(livre.editeur || '')
+      setCollection(livre.collection || '')
+      setDatePublication(livre.date_publication || '')
+      setUrlGoodreads(livre.url_goodreads || '')
+      setApercuCouverture(livre.isbn ? 'https://books.google.com/books/content?vid=ISBN' + livre.isbn + '&printsec=frontcover&img=1&zoom=1' : '')
     } else {
       setLivreEdite(null)
       setTitre('')
@@ -72,12 +114,25 @@ export default function Dashboard() {
       setPrix('')
       setStock('')
       setGenre('')
+      setDescription('')
+      setEditeur('')
+      setCollection('')
+      setDatePublication('')
+      setUrlGoodreads('')
+      setApercuCouverture('')
     }
     setFormulaireLivre(true)
   }
 
   const sauvegarderLivre = async function() {
-    const body = JSON.stringify({ titre, auteur, isbn, prix: parseFloat(prix), stock: parseInt(stock), genre })
+    const body = JSON.stringify({
+      titre, auteur, isbn,
+      prix: parseFloat(prix),
+      stock: parseInt(stock),
+      genre, description, editeur, collection,
+      date_publication: datePublication,
+      url_goodreads: urlGoodreads
+    })
     const headers = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token() }
     if (livreEdite) {
       await fetch('http://localhost:3001/livres/' + livreEdite.id, { method: 'PUT', headers, body })
@@ -104,12 +159,8 @@ export default function Dashboard() {
 
   const styleOnglet = function(nom) {
     return {
-      padding: '10px 24px',
-      borderRadius: '8px',
-      border: 'none',
-      fontSize: '14px',
-      fontWeight: '600',
-      cursor: 'pointer',
+      padding: '10px 24px', borderRadius: '8px', border: 'none', fontSize: '14px',
+      fontWeight: '600', cursor: 'pointer',
       backgroundColor: onglet === nom ? '#1a3d2b' : 'transparent',
       color: onglet === nom ? 'white' : '#666'
     }
@@ -129,9 +180,13 @@ export default function Dashboard() {
 
   const GENRES = [
     'Roman', 'Policier', 'Science-fiction', 'Fantasy', 'Biographie',
-    'Histoire', 'Essai', 'Jeunesse', 'Bande dessinée', 'Poésie',
-    'Thriller', 'Romance', 'Développement personnel', 'Philosophie', 'Autre'
+    'Histoire', 'Essai', 'Jeunesse', 'Bande dessinee', 'Poesie',
+    'Thriller', 'Romance', 'Developpement personnel', 'Philosophie', 'Autre'
   ]
+
+  const inputStyle = { width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box' as const, fontFamily: 'Georgia, serif' }
+  const labelStyle = { fontSize: '12px', color: '#999', display: 'block' as const, marginBottom: '4px' }
+  const sectionTitleStyle = { fontSize: '12px', color: '#999', letterSpacing: '1px', marginBottom: '12px', fontWeight: '600' as const }
 
   return (
     <div style={{ backgroundColor: '#f9f6f1', minHeight: '100vh' }}>
@@ -155,7 +210,6 @@ export default function Dashboard() {
           <button onClick={() => setOnglet('catalogue')} style={styleOnglet('catalogue')}>Catalogue</button>
         </div>
 
-        {/* RESERVATIONS */}
         {onglet === 'reservations' && (
           <>
             <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px', color: '#1a1a1a' }}>
@@ -198,7 +252,6 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* COMMANDES CLICK & COLLECT */}
         {onglet === 'commandes' && (
           <>
             <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '24px', color: '#1a1a1a' }}>
@@ -224,11 +277,7 @@ export default function Dashboard() {
                         <td style={{ padding: '14px 16px', fontSize: '14px' }}>{c.titre}</td>
                         <td style={{ padding: '14px 16px', fontSize: '14px', fontWeight: '600', color: '#1a3d2b' }}>{c.prix} €</td>
                         <td style={{ padding: '14px 16px' }}>
-                          <span style={{
-                            backgroundColor: c.type === 'stock' ? '#e8f5e9' : '#fff8e1',
-                            color: c.type === 'stock' ? '#1a3d2b' : '#e65100',
-                            padding: '3px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '600'
-                          }}>
+                          <span style={{ backgroundColor: c.type === 'stock' ? '#e8f5e9' : '#fff8e1', color: c.type === 'stock' ? '#1a3d2b' : '#e65100', padding: '3px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: '600' }}>
                             {c.type === 'stock' ? 'En stock' : 'A commander'}
                           </span>
                         </td>
@@ -256,7 +305,6 @@ export default function Dashboard() {
           </>
         )}
 
-        {/* CATALOGUE */}
         {onglet === 'catalogue' && (
           <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
@@ -268,34 +316,79 @@ export default function Dashboard() {
 
             {formulaireLivre && (
               <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '28px', marginBottom: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.07)', borderTop: '4px solid #1a3d2b' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '20px' }}>{livreEdite ? 'Modifier le livre' : 'Nouveau livre'}</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                  {[['Titre', titre, setTitre], ['Auteur', auteur, setAuteur], ['ISBN', isbn, setIsbn], ['Prix', prix, setPrix], ['Stock', stock, setStock]].map(([label, val, setter]) => (
-                    <div key={label}>
-                      <label style={{ fontSize: '12px', color: '#999', display: 'block', marginBottom: '4px' }}>{label}</label>
-                      <input
-                        type="text"
-                        value={val}
-                        onChange={e => setter(e.target.value)}
-                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box' }}
-                      />
-                    </div>
-                  ))}
+                <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '24px' }}>{livreEdite ? 'Modifier le livre' : 'Nouveau livre'}</h3>
+
+                <p style={sectionTitleStyle}>RECHERCHE AUTOMATIQUE VIA GOOGLE BOOKS</p>
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', alignItems: 'flex-end' }}>
+                  <div style={{ flex: 1 }}>
+                    <label style={labelStyle}>ISBN</label>
+                    <input type="text" value={isbn} onChange={e => setIsbn(e.target.value)} placeholder="ex. 9782070360024" style={inputStyle} />
+                  </div>
+                  <button
+                    onClick={rechercherGoogleBooks}
+                    disabled={rechercheLivre || !isbn}
+                    style={{ padding: '10px 20px', backgroundColor: rechercheLivre || !isbn ? '#ccc' : '#c9a84c', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: rechercheLivre || !isbn ? 'not-allowed' as const : 'pointer' as const, whiteSpace: 'nowrap' as const }}
+                  >
+                    {rechercheLivre ? 'Recherche...' : 'Remplir via Google Books'}
+                  </button>
+                  {apercuCouverture && (
+                    <img src={apercuCouverture} alt="Couverture" style={{ height: '80px', borderRadius: '4px', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }} />
+                  )}
+                </div>
+
+                <p style={sectionTitleStyle}>INFORMATIONS PRINCIPALES</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
                   <div>
-                    <label style={{ fontSize: '12px', color: '#999', display: 'block', marginBottom: '4px' }}>Genre</label>
-                    <select
-                      value={genre}
-                      onChange={e => setGenre(e.target.value)}
-                      style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', backgroundColor: 'white' }}
-                    >
-                      <option value="">— Sélectionner un genre —</option>
-                      {GENRES.map(g => (
-                        <option key={g} value={g}>{g}</option>
-                      ))}
+                    <label style={labelStyle}>Titre</label>
+                    <input type="text" value={titre} onChange={e => setTitre(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Auteur</label>
+                    <input type="text" value={auteur} onChange={e => setAuteur(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Genre</label>
+                    <select value={genre} onChange={e => setGenre(e.target.value)} style={{ ...inputStyle, backgroundColor: 'white' }}>
+                      <option value="">— Selectionner un genre —</option>
+                      {GENRES.map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
                   </div>
+                  <div>
+                    <label style={labelStyle}>Prix (€)</label>
+                    <input type="text" value={prix} onChange={e => setPrix(e.target.value)} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Stock</label>
+                    <input type="text" value={stock} onChange={e => setStock(e.target.value)} style={inputStyle} />
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '12px', marginTop: '20px' }}>
+
+                <p style={sectionTitleStyle}>INFORMATIONS EDITEUR</p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+                  <div>
+                    <label style={labelStyle}>Editeur</label>
+                    <input type="text" value={editeur} onChange={e => setEditeur(e.target.value)} style={inputStyle} placeholder="ex. Gallimard" />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Collection</label>
+                    <input type="text" value={collection} onChange={e => setCollection(e.target.value)} style={inputStyle} placeholder="ex. Folio" />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Date de publication</label>
+                    <input type="text" value={datePublication} onChange={e => setDatePublication(e.target.value)} style={inputStyle} placeholder="ex. 2024-01-15" />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Lien Goodreads</label>
+                    <input type="text" value={urlGoodreads} onChange={e => setUrlGoodreads(e.target.value)} style={inputStyle} placeholder="https://www.goodreads.com/book/..." />
+                  </div>
+                </div>
+
+                <p style={sectionTitleStyle}>DESCRIPTION</p>
+                <div style={{ marginBottom: '24px' }}>
+                  <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4} placeholder="Resume ou presentation du livre..." style={{ ...inputStyle, resize: 'vertical' as const }} />
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px' }}>
                   <button onClick={sauvegarderLivre} style={{ backgroundColor: '#1a3d2b', color: 'white', border: 'none', borderRadius: '8px', padding: '10px 24px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>
                     {livreEdite ? 'Enregistrer' : 'Ajouter'}
                   </button>
@@ -310,27 +403,33 @@ export default function Dashboard() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ backgroundColor: '#f5f5f5' }}>
-                    {['Titre', 'Auteur', 'Genre', 'ISBN', 'Prix', 'Stock', 'Actions'].map(h => (
-                      <th key={h} style={{ padding: '14px 20px', textAlign: 'left', fontSize: '13px', color: '#666', fontWeight: '600' }}>{h}</th>
+                    {['Couverture', 'Titre', 'Auteur', 'Genre', 'Editeur', 'Prix', 'Stock', 'Actions'].map(h => (
+                      <th key={h} style={{ padding: '14px 16px', textAlign: 'left', fontSize: '13px', color: '#666', fontWeight: '600' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {livres.map((l, i) => (
                     <tr key={l.id} style={{ borderTop: '1px solid #f0f0f0', backgroundColor: i % 2 === 0 ? 'white' : '#fafafa' }}>
-                      <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: '500' }}>{l.titre}</td>
-                      <td style={{ padding: '14px 20px', fontSize: '14px', color: '#666' }}>{l.auteur}</td>
-                      <td style={{ padding: '14px 20px', fontSize: '14px', color: '#666' }}>
+                      <td style={{ padding: '10px 16px' }}>
+                        <img
+                          src={'https://books.google.com/books/content?vid=ISBN' + l.isbn + '&printsec=frontcover&img=1&zoom=1'}
+                          alt={l.titre}
+                          style={{ height: '50px', width: '34px', objectFit: 'cover' as const, borderRadius: '2px', boxShadow: '0 1px 4px rgba(0,0,0,0.15)' }}
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                      </td>
+                      <td style={{ padding: '14px 16px', fontSize: '14px', fontWeight: '500' }}>{l.titre}</td>
+                      <td style={{ padding: '14px 16px', fontSize: '14px', color: '#666' }}>{l.auteur}</td>
+                      <td style={{ padding: '14px 16px' }}>
                         {l.genre ? (
                           <span style={{ backgroundColor: '#f0f7f4', color: '#1a3d2b', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>{l.genre}</span>
-                        ) : (
-                          <span style={{ color: '#ccc', fontSize: '13px' }}>—</span>
-                        )}
+                        ) : <span style={{ color: '#ccc', fontSize: '13px' }}>—</span>}
                       </td>
-                      <td style={{ padding: '14px 20px', fontSize: '14px', color: '#666' }}>{l.isbn}</td>
-                      <td style={{ padding: '14px 20px', fontSize: '14px', fontWeight: '600', color: '#1a3d2b' }}>{l.prix} €</td>
-                      <td style={{ padding: '14px 20px', fontSize: '14px' }}>{l.stock}</td>
-                      <td style={{ padding: '14px 20px' }}>
+                      <td style={{ padding: '14px 16px', fontSize: '14px', color: '#666' }}>{l.editeur || '—'}</td>
+                      <td style={{ padding: '14px 16px', fontSize: '14px', fontWeight: '600', color: '#1a3d2b' }}>{l.prix} €</td>
+                      <td style={{ padding: '14px 16px', fontSize: '14px' }}>{l.stock}</td>
+                      <td style={{ padding: '14px 16px' }}>
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={() => ouvrirFormulaire(l)} style={{ backgroundColor: '#f0f0f0', color: '#333', border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Modifier</button>
                           <button onClick={() => supprimerLivre(l.id)} style={{ backgroundColor: 'transparent', color: '#c62828', border: '1px solid #c62828', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Supprimer</button>
