@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react'
 const C = {
   vert: '#1A3C2E',
   or: '#C9A84C',
-  orIntense: '#B8860B',
+  orIntense: '#9A6F09',
   fond: '#F9F6F0',
   fondAlt: '#EAF2EC',
   texte: '#1C1C1C',
@@ -154,7 +154,7 @@ export default function ClickCollect() {
             </div>
             {erreur && <p style={{ color: '#e53935', fontSize: '14px', marginBottom: '16px' }}>{erreur}</p>}
             <div style={{ display: 'flex', gap: '12px' }}>
-              <button onClick={handleCommande} disabled={chargement} style={{ backgroundColor: chargement ? '#aaa' : C.vert, color: 'white', border: 'none', borderRadius: '10px', padding: '14px 32px', fontSize: '15px', fontWeight: '700', cursor: chargement ? 'not-allowed' : 'pointer', flex: 1 }}>
+              <button onClick={handleCommande} disabled={chargement} style={{ backgroundColor: chargement ? '#aaa' : C.orIntense, color: 'white', border: 'none', borderRadius: '10px', padding: '14px 32px', fontSize: '15px', fontWeight: '700', cursor: chargement ? 'not-allowed' : 'pointer', flex: 1 }}>
                 {chargement ? 'Envoi...' : 'Confirmer — Paiement en boutique'}
               </button>
               <button onClick={() => setLivreSelectionne(null)} style={{ backgroundColor: 'transparent', color: C.texteSecondaire, border: '1px solid #ddd', borderRadius: '10px', padding: '14px 24px', fontSize: '14px', cursor: 'pointer' }}>

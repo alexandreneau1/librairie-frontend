@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 const C = {
   vert: '#1A3C2E',
   or: '#C9A84C',
+  orIntense: '#9A6F09',
   fond: '#F9F6F0',
   fondAlt: '#EAF2EC',
   texte: '#1C1C1C',
