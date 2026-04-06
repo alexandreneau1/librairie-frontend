@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { usePathname } from 'next/navigation'
+import React, { useState, useEffect, useRef, startTransition } from 'react'
 import Header from '../../components/Header'
-import { ajouterAuPanier, estDansPanier, getNbArticles } from '../../lib/panier'
+import { ajouterAuPanier } from '../../lib/panier'
 
 const C = {
   vert: '#1A3C2E',
@@ -23,29 +22,29 @@ const ETAPES = [
     options: [
       { label: 'Roman / Littérature', genres: ['Roman', 'Romance', 'Poésie'] },
       { label: 'Policier / Thriller', genres: ['Policier', 'Thriller'] },
-      { label: 'SF & Fantasy',        genres: ['Science-fiction', 'Fantasy'] },
-      { label: 'Essai / Idées',       genres: ['Essai', 'Histoire', 'Philosophie', 'Biographie', 'Développement personnel'] },
-      { label: 'Jeunesse',            genres: ['Jeunesse'] },
-      { label: 'Bande dessinée',      genres: ['Bande dessinée'] },
+      { label: 'SF & Fantasy', genres: ['Science-fiction', 'Fantasy'] },
+      { label: 'Essai / Idées', genres: ['Essai', 'Histoire', 'Philosophie', 'Biographie', 'Développement personnel'] },
+      { label: 'Jeunesse', genres: ['Jeunesse'] },
+      { label: 'Bande dessinée', genres: ['Bande dessinée'] },
     ],
   },
   {
     question: 'Quelle ambiance recherchez-vous ?',
     icone: '🌿',
     options: [
-      { label: 'Me dépayser',             tag: 'depaysement' },
-      { label: 'Ressentir des émotions',  tag: 'emotion' },
-      { label: 'Réfléchir, apprendre',    tag: 'reflexion' },
-      { label: 'Me détendre',             tag: 'detente' },
-      { label: 'Avoir des frissons',      tag: 'frissons' },
+      { label: 'Me dépayser', tag: 'depaysement' },
+      { label: 'Ressentir des émotions', tag: 'emotion' },
+      { label: 'Réfléchir, apprendre', tag: 'reflexion' },
+      { label: 'Me détendre', tag: 'detente' },
+      { label: 'Avoir des frissons', tag: 'frissons' },
     ],
   },
   {
     question: 'Pour qui est ce livre ?',
     icone: '🎁',
     options: [
-      { label: 'Pour moi',              tag: 'moi' },
-      { label: 'Cadeau — adulte',       tag: 'cadeau_adulte' },
+      { label: 'Pour moi', tag: 'moi' },
+      { label: 'Cadeau — adulte', tag: 'cadeau_adulte' },
       { label: 'Cadeau — enfant / ado', tag: 'cadeau_enfant' },
     ],
   },
@@ -53,19 +52,19 @@ const ETAPES = [
     question: 'Combien de temps avez-vous ?',
     icone: '⏱',
     options: [
-      { label: 'Une soirée (< 200 pages)',          tag: 'court' },
-      { label: 'Un week-end (200–400 pages)',        tag: 'moyen' },
-      { label: 'Plusieurs semaines (> 400 pages)',   tag: 'long' },
-      { label: 'Peu importe',                        tag: 'indifferent' },
+      { label: 'Une soirée (< 200 pages)', tag: 'court' },
+      { label: 'Un week-end (200–400 pages)', tag: 'moyen' },
+      { label: 'Plusieurs semaines (> 400 pages)', tag: 'long' },
+      { label: 'Peu importe', tag: 'indifferent' },
     ],
   },
   {
     question: 'Une époque de prédilection ?',
     icone: '🕰',
     options: [
-      { label: 'Classique (avant 1960)',    tag: 'classique' },
+      { label: 'Classique (avant 1960)', tag: 'classique' },
       { label: 'Contemporain (après 1960)', tag: 'contemporain' },
-      { label: 'Peu importe',               tag: 'indifferent' },
+      { label: 'Peu importe', tag: 'indifferent' },
     ],
   },
 ]
@@ -81,6 +80,7 @@ type SelectionLivre = {
   isbn: string
   prix: number
   stock: number
+  livre_genre?: string | null
 }
 
 type Selections = {
@@ -89,10 +89,23 @@ type Selections = {
   top_ventes: SelectionLivre[]
 }
 
-// ── Carte livre individuelle ──────────────────────────────────────────────────
-function CarteLivre({
-  livre, label, clientConnecte, wishlistIds, onWishlist,
-}: {
+const SELECTIONS_VIDES: Selections = { coups_de_coeur: [], prix: [], top_ventes: [] }
+
+// Cache via sessionStorage : survit aux navigations Next.js
+function getCache(): Selections | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem('bookdog_selections')
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
+function setCache(d: Selections) {
+  try { sessionStorage.setItem('bookdog_selections', JSON.stringify(d)) } catch {}
+}
+
+// ── Carte livre ───────────────────────────────────────────────────────────────
+function CarteLivre({ livre, label, clientConnecte, wishlistIds, onWishlist }: {
   livre: SelectionLivre
   label?: string | null
   clientConnecte: boolean
@@ -113,7 +126,6 @@ function CarteLivre({
 
   return (
     <a href={`/livres/${livre.livre_id}`} style={{ textDecoration: 'none', flexShrink: 0, width: '160px', display: 'flex', flexDirection: 'column' }}>
-      {/* Couverture */}
       <div style={{ position: 'relative', width: '160px', height: '220px', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', backgroundColor: C.fondAlt, marginBottom: '10px', flexShrink: 0 }}>
         {imgOk ? (
           <img src={couverture} alt={livre.titre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setImgOk(false)} />
@@ -123,26 +135,20 @@ function CarteLivre({
             <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: 0, fontStyle: 'italic', lineHeight: '1.3' }}>{livre.titre}</p>
           </div>
         )}
-        {/* Label libraire */}
         {label && (
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(26,60,46,0.95))', padding: '20px 8px 8px' }}>
             <p style={{ color: C.or, fontSize: '10px', margin: 0, lineHeight: '1.3', fontStyle: 'italic' }}>{label}</p>
           </div>
         )}
       </div>
-
-      {/* Infos */}
       <p style={{ fontSize: '13px', fontWeight: '700', color: C.texte, margin: '0 0 2px', lineHeight: '1.3', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{livre.titre}</p>
       <p style={{ fontSize: '11px', color: C.texteSecondaire, margin: '0 0 8px', fontStyle: 'italic', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{livre.auteur}</p>
-
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
         <span style={{ fontSize: '15px', fontWeight: '700', color: C.vert }}>{livre.prix} €</span>
         <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 7px', borderRadius: '20px', backgroundColor: livre.stock > 0 ? C.fondAlt : '#fff8e6', color: livre.stock > 0 ? C.vert : C.orIntense }}>
           {livre.stock > 0 ? 'En stock' : 'Commande'}
         </span>
       </div>
-
-      {/* Boutons */}
       <div style={{ display: 'flex', gap: '6px' }} onClick={e => e.preventDefault()}>
         <button
           onClick={e => { e.preventDefault(); if (!clientConnecte) { window.location.href = '/compte/connexion'; return } onWishlist(livre.livre_id, inWishlist) }}
@@ -161,10 +167,8 @@ function CarteLivre({
   )
 }
 
-// ── Section carousel ──────────────────────────────────────────────────────────
-function SectionCarousel({
-  titre, sousTitre, livres, clientConnecte, wishlistIds, onWishlist, accentColor,
-}: {
+// ── Carousel ──────────────────────────────────────────────────────────────────
+function SectionCarousel({ titre, sousTitre, livres, clientConnecte, wishlistIds, onWishlist, accentColor }: {
   titre: string
   sousTitre?: string
   livres: SelectionLivre[]
@@ -175,10 +179,7 @@ function SectionCarousel({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   if (!livres || livres.length === 0) return null
-
-  const scroll = (dir: 'left' | 'right') => {
-    scrollRef.current?.scrollBy({ left: dir === 'right' ? 400 : -400, behavior: 'smooth' })
-  }
+  const scroll = (dir: 'left' | 'right') => scrollRef.current?.scrollBy({ left: dir === 'right' ? 400 : -400, behavior: 'smooth' })
 
   return (
     <div style={{ marginBottom: '48px' }}>
@@ -203,53 +204,68 @@ function SectionCarousel({
 
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Livres() {
-  const [selections, setSelections] = useState<Selections | null>(null)
+  const [selections, setSelections] = useState<Selections>(() => getCache() || SELECTIONS_VIDES)
+  const [loaded, setLoaded] = useState(() => getCache() !== null)
   const [wishlistIds, setWishlistIds] = useState<Set<number>>(new Set())
   const [clientConnecte, setClientConnecte] = useState(false)
-
-  // Wizard
   const [panelVisible, setPanelVisible] = useState(true)
   const [wizardOuvert, setWizardOuvert] = useState(false)
   const [etape, setEtape] = useState(0)
   const [reponses, setReponses] = useState<Record<number, any>>({})
   const [wizardTermine, setWizardTermine] = useState(false)
-
-  // Filtres sidebar
-  const pathname = usePathname()
   const [recherche, setRecherche] = useState('')
   const [genreFiltre, setGenreFiltre] = useState('')
 
-  // Chargement initial + rechargement a chaque fois qu on revient sur la page
   useEffect(() => {
-    const saved = localStorage.getItem('bookdog_panel_visible')
-    if (saved === 'false') setPanelVisible(false)
+    console.log('MOUNT')
+    return () => { console.log('UNMOUNT') }
   }, [])
 
   useEffect(() => {
+    const saved = localStorage.getItem('bookdog_panel_visible')
+    if (saved === 'false') setPanelVisible(false)
+
     const token = localStorage.getItem('clientToken')
     setClientConnecte(!!token)
-
-    // Cache-busting : timestamp force le navigateur a ne pas utiliser le cache
-    fetch('http://localhost:3001/selections?t=' + Date.now())
-      .then(r => r.json())
-      .then(d => setSelections(d))
-      .catch(() => setSelections({ coups_de_coeur: [], prix: [], top_ventes: [] }))
 
     if (token) {
       fetch('http://localhost:3001/compte/wishlist', { headers: { Authorization: 'Bearer ' + token } })
         .then(r => r.json())
-        .then(data => { if (Array.isArray(data)) setWishlistIds(new Set(data.map((w: any) => w.livre_id))) })
+        .then(data => {
+          if (Array.isArray(data)) {
+            startTransition(() => {
+              setWishlistIds(new Set(data.map((w: any) => w.livre_id)))
+            })
+          }
+        })
     }
 
-    // Force re-execution au retour arriere navigateur
-    const onPageShow = () => {
-      fetch('http://localhost:3001/selections?t=' + Date.now())
-        .then(r => r.json())
-        .then(d => setSelections(d))
-        .catch(() => {})
+    // Si on a déjà le cache sessionStorage, pas besoin de refetch
+    const cached = getCache()
+    if (cached) {
+      startTransition(() => {
+        setSelections(cached)
+        setLoaded(true)
+      })
+      return
     }
-    window.addEventListener('pageshow', onPageShow)
-    return () => window.removeEventListener('pageshow', onPageShow)
+
+    // Fetch avec startTransition pour forcer le rendu React 19
+    fetch('http://localhost:3001/selections?t=' + Date.now())
+      .then(r => r.json())
+      .then(d => {
+        setCache(d)
+        startTransition(() => {
+          setSelections(d)
+          setLoaded(true)
+        })
+      })
+      .catch(() => {
+        startTransition(() => {
+          setSelections(SELECTIONS_VIDES)
+          setLoaded(true)
+        })
+      })
   }, [])
 
   const togglePanel = () => {
@@ -272,8 +288,7 @@ export default function Livres() {
   }
 
   const resetWizard = () => {
-    setEtape(0); setReponses({}); setWizardTermine(false); setWizardOuvert(true)
-    setGenreFiltre('')
+    setEtape(0); setReponses({}); setWizardTermine(false); setWizardOuvert(true); setGenreFiltre('')
   }
 
   async function toggleWishlist(livre_id: number, inList: boolean) {
@@ -288,14 +303,11 @@ export default function Livres() {
     }
   }
 
-  // Filtrage des sélections par genre/recherche si wizard actif
   const filtrerLivres = (livres: SelectionLivre[]) => {
     if (!genreFiltre && !recherche) return livres
     return livres.filter(l => {
       const matchGenre = genreFiltre ? l.livre_genre === genreFiltre : true
-      const matchRecherche = recherche
-        ? l.titre.toLowerCase().includes(recherche.toLowerCase()) || l.auteur.toLowerCase().includes(recherche.toLowerCase())
-        : true
+      const matchRecherche = recherche ? l.titre.toLowerCase().includes(recherche.toLowerCase()) || l.auteur.toLowerCase().includes(recherche.toLowerCase()) : true
       return matchGenre && matchRecherche
     })
   }
@@ -310,29 +322,23 @@ export default function Livres() {
 
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px 80px', boxSizing: 'border-box' }}>
 
-        {/* ── PANEL WIZARD ── */}
+        {/* Panel wizard */}
         <div style={{ marginBottom: '32px' }}>
           {panelVisible ? (
             <div style={{ backgroundColor: C.vert, borderRadius: '12px', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
               <div style={{ flex: 1 }}>
                 {!wizardOuvert && !wizardTermine && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-                    <button
-                      onClick={() => setWizardOuvert(true)}
-                      style={{ backgroundColor: C.orIntense, color: 'white', border: 'none', borderRadius: '40px', padding: '10px 22px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif', whiteSpace: 'nowrap' }}
-                    >
+                    <button onClick={() => setWizardOuvert(true)} style={{ backgroundColor: C.orIntense, color: 'white', border: 'none', borderRadius: '40px', padding: '10px 22px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif', whiteSpace: 'nowrap' }}>
                       Pas d'idée ? Trouvons un livre ensemble →
                     </button>
                     <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: 0 }}>5 questions pour trouver votre prochain coup de cœur</p>
                   </div>
                 )}
-
                 {wizardOuvert && (
                   <div>
                     <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
-                      {ETAPES.map((_, i) => (
-                        <div key={i} style={{ flex: 1, height: '3px', borderRadius: '2px', backgroundColor: i <= etape ? C.or : 'rgba(255,255,255,0.2)' }} />
-                      ))}
+                      {ETAPES.map((_, i) => <div key={i} style={{ flex: 1, height: '3px', borderRadius: '2px', backgroundColor: i <= etape ? C.or : 'rgba(255,255,255,0.2)' }} />)}
                     </div>
                     <p style={{ color: C.or, fontSize: '11px', letterSpacing: '1.5px', margin: '0 0 8px', fontWeight: '600' }}>
                       {etapeCourante.icone} QUESTION {etape + 1} / {ETAPES.length} — {etapeCourante.question}
@@ -348,12 +354,9 @@ export default function Livres() {
                         </button>
                       ))}
                     </div>
-                    {etape > 0 && (
-                      <button onClick={() => setEtape(etape - 1)} style={{ marginTop: '10px', background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '12px', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>← Retour</button>
-                    )}
+                    {etape > 0 && <button onClick={() => setEtape(etape - 1)} style={{ marginTop: '10px', background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: '12px', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>← Retour</button>}
                   </div>
                 )}
-
                 {wizardTermine && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
                     <div>
@@ -366,8 +369,7 @@ export default function Livres() {
                   </div>
                 )}
               </div>
-
-              <button onClick={togglePanel} title="Masquer" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '18px', cursor: 'pointer', padding: '4px', flexShrink: 0 }}>✕</button>
+              <button onClick={togglePanel} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '18px', cursor: 'pointer', padding: '4px', flexShrink: 0 }}>✕</button>
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -378,31 +380,21 @@ export default function Livres() {
           )}
         </div>
 
-        {/* ── LAYOUT PRINCIPAL : sidebar gauche + sélections droite ── */}
+        {/* Layout sidebar + sélections */}
         <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '32px', alignItems: 'start' }}>
 
-          {/* ── SIDEBAR ── */}
+          {/* Sidebar */}
           <div style={{ position: 'sticky', top: '24px' }}>
-
-            {/* Recherche */}
             <div style={sidebarCard}>
-              <input
-                type="text"
-                placeholder="Titre, auteur..."
-                value={recherche}
-                onChange={e => setRecherche(e.target.value)}
-                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '13px', boxSizing: 'border-box', fontFamily: 'Georgia, serif' }}
-              />
+              <input type="text" placeholder="Titre, auteur..." value={recherche} onChange={e => setRecherche(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '13px', boxSizing: 'border-box', fontFamily: 'Georgia, serif' }} />
             </div>
-
-            {/* Filtre genre (lié au wizard) */}
             {genreFiltre && (
               <div style={{ backgroundColor: C.fondAlt, borderRadius: '10px', padding: '10px 14px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '13px', color: C.vert, fontWeight: '600' }}>{genreFiltre}</span>
                 <button onClick={() => { setGenreFiltre(''); setWizardTermine(false); setEtape(0); setReponses({}) }} style={{ background: 'none', border: 'none', color: C.texteSecondaire, cursor: 'pointer', fontSize: '14px', padding: 0 }}>✕</button>
               </div>
             )}
-
             <div style={sidebarCard}>
               <p style={sectionLabel}>GENRE</p>
               {['Roman', 'Policier', 'Thriller', 'Science-fiction', 'Fantasy', 'Histoire', 'Biographie', 'Essai', 'Jeunesse', 'Bande dessinée', 'Poésie', 'Romance', 'Développement personnel', 'Philosophie'].map(g => (
@@ -417,46 +409,20 @@ export default function Livres() {
                 </button>
               )}
             </div>
-
             <a href="/livres/catalogue" style={{ display: 'block', textAlign: 'center', padding: '10px', backgroundColor: 'white', border: `1px solid ${C.vert}`, borderRadius: '10px', color: C.vert, textDecoration: 'none', fontSize: '13px', fontWeight: '700' }}>
               Voir tout le catalogue →
             </a>
           </div>
 
-          {/* ── SÉLECTIONS ── */}
+          {/* Sélections */}
           <div>
-            {selections === null ? (
+            {!loaded ? (
               <div style={{ textAlign: 'center', padding: '60px 0', color: C.texteSecondaire }}>Chargement des sélections...</div>
             ) : (
               <>
-                <SectionCarousel
-                  titre="Coups de cœur de vos libraires"
-                  sousTitre="Une sélection passionnée, renouvelée chaque semaine"
-                  livres={filtrerLivres(selections.coups_de_coeur)}
-                  clientConnecte={clientConnecte}
-                  wishlistIds={wishlistIds}
-                  onWishlist={toggleWishlist}
-                  accentColor={C.vert}
-                />
-                <SectionCarousel
-                  titre="Top ventes"
-                  sousTitre="Les titres les plus demandés en ce moment"
-                  livres={filtrerLivres(selections.top_ventes)}
-                  clientConnecte={clientConnecte}
-                  wishlistIds={wishlistIds}
-                  onWishlist={toggleWishlist}
-                  accentColor={C.or}
-                />
-                <SectionCarousel
-                  titre="Récompensés"
-                  sousTitre="Prix littéraires et distinctions"
-                  livres={filtrerLivres(selections.prix)}
-                  clientConnecte={clientConnecte}
-                  wishlistIds={wishlistIds}
-                  onWishlist={toggleWishlist}
-                  accentColor="#8B4513"
-                />
-
+                <SectionCarousel titre="Coups de cœur de vos libraires" sousTitre="Une sélection passionnée, renouvelée chaque semaine" livres={filtrerLivres(selections.coups_de_coeur)} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={toggleWishlist} accentColor={C.vert} />
+                <SectionCarousel titre="Top ventes" sousTitre="Les titres les plus demandés en ce moment" livres={filtrerLivres(selections.top_ventes)} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={toggleWishlist} accentColor={C.or} />
+                <SectionCarousel titre="Récompensés" sousTitre="Prix littéraires et distinctions" livres={filtrerLivres(selections.prix)} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={toggleWishlist} accentColor="#8B4513" />
                 {selections.coups_de_coeur.length === 0 && selections.top_ventes.length === 0 && selections.prix.length === 0 && (
                   <div style={{ textAlign: 'center', padding: '80px 0' }}>
                     <p style={{ fontSize: '40px', marginBottom: '12px' }}>📚</p>
