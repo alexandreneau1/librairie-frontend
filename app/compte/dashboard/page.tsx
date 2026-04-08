@@ -18,6 +18,7 @@ type Commande = { id: number; titre: string; auteur: string; prix: number; type:
 type Reservation = { id: number; titre: string; auteur: string; prix: number; statut: string; date_reservation: string }
 type Vente = { id: number; titre: string; auteur: string; quantite: number; prix_unitaire: number; date_vente: string }
 type WishlistItem = { id: number; livre_id: number; titre: string; auteur: string; prix: number; stock: number; date_ajout: string }
+type Recommandation = { livre_id: number; titre: string; auteur: string; genre: string; prix: number; raison: string }
 
 export default function Dashboard() {
   const router = useRouter()
@@ -28,6 +29,11 @@ export default function Dashboard() {
   const [ventes, setVentes] = useState<Vente[]>([])
   const [wishlist, setWishlist] = useState<WishlistItem[]>([])
   const [chargement, setChargement] = useState(true)
+
+  // ── Recommandations ─────────────────────────────────────────────────────────
+  const [recommandations, setRecommandations] = useState<Recommandation[]>([])
+  const [chargementReco, setChargementReco] = useState(false)
+  const [recoChargees, setRecoChargees] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('clientToken')
@@ -42,6 +48,21 @@ export default function Dashboard() {
       .then(data => setWishlist(data || []))
       .finally(() => setChargement(false))
   }, [router])
+
+  async function chargerRecommandations() {
+    const token = localStorage.getItem('clientToken')
+    if (!token) return
+    setChargementReco(true)
+    try {
+      const res = await fetch('http://localhost:3001/api/recommandations', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      })
+      const data = await res.json()
+      if (data.recommandations) setRecommandations(data.recommandations)
+    } catch {}
+    setChargementReco(false)
+    setRecoChargees(true)
+  }
 
   function deconnexion() {
     localStorage.removeItem('clientToken')
@@ -76,10 +97,10 @@ export default function Dashboard() {
   }
 
   const onglets = [
-    { id: 'commandes',    label: 'Click & Collect',      count: commandes.length },
-    { id: 'reservations', label: 'Réservations',          count: reservations.length },
-    { id: 'achats',       label: 'Achats en magasin',     count: ventes.length },
-    { id: 'wishlist',     label: 'Wishlist',              count: wishlist.length },
+    { id: 'commandes',    label: 'Click & Collect',  count: commandes.length },
+    { id: 'reservations', label: 'Réservations',      count: reservations.length },
+    { id: 'achats',       label: 'Achats en magasin', count: ventes.length },
+    { id: 'wishlist',     label: 'Wishlist',          count: wishlist.length },
   ]
 
   const carteStyle = { backgroundColor: 'white', borderRadius: '12px', padding: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' as const, gap: '12px' }
@@ -113,6 +134,72 @@ export default function Dashboard() {
           <h2 style={{ fontSize: '32px', fontWeight: '700', color: C.texte, margin: 0 }}>Mon compte</h2>
         </div>
 
+        {/* ── BLOC RECOMMANDATIONS IA ─────────────────────────────────────── */}
+        <div style={{ backgroundColor: C.vert, borderRadius: '16px', padding: '28px', marginBottom: '40px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: recoChargees && recommandations.length > 0 ? '24px' : '0', flexWrap: 'wrap', gap: '12px' }}>
+            <div>
+              <p style={{ color: C.or, fontSize: '11px', letterSpacing: '2px', fontWeight: '600', margin: '0 0 4px' }}>INTELLIGENCE ARTIFICIELLE</p>
+              <h3 style={{ color: 'white', fontSize: '20px', fontWeight: '700', margin: 0 }}>Nos suggestions pour vous</h3>
+            </div>
+            {!recoChargees ? (
+              <button
+                onClick={chargerRecommandations}
+                disabled={chargementReco}
+                style={{ backgroundColor: chargementReco ? 'rgba(255,255,255,0.1)' : C.or, color: chargementReco ? 'rgba(255,255,255,0.5)' : C.vert, border: 'none', borderRadius: '40px', padding: '10px 24px', fontSize: '14px', fontWeight: '700', cursor: chargementReco ? 'not-allowed' : 'pointer', fontFamily: 'Georgia, serif', whiteSpace: 'nowrap' as const }}
+              >
+                {chargementReco ? '✨ Analyse en cours...' : '✨ Obtenir mes recommandations'}
+              </button>
+            ) : (
+              <button
+                onClick={chargerRecommandations}
+                disabled={chargementReco}
+                style={{ backgroundColor: 'transparent', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '40px', padding: '8px 16px', fontSize: '12px', cursor: chargementReco ? 'not-allowed' : 'pointer', fontFamily: 'Georgia, serif' }}
+              >
+                {chargementReco ? '...' : '↺ Actualiser'}
+              </button>
+            )}
+          </div>
+
+          {chargementReco && !recoChargees && (
+            <div style={{ textAlign: 'center', padding: '20px 0' }}>
+              <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', margin: 0 }}>Notre libraire IA analyse vos lectures pour trouver vos prochains coups de cœur...</p>
+            </div>
+          )}
+
+          {recoChargees && recommandations.length === 0 && (
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', marginTop: '16px' }}>Aucune recommandation disponible pour le moment.</p>
+          )}
+
+          {recoChargees && recommandations.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+              {recommandations.map((r, i) => (
+                <a key={i} href={`/livres/${r.livre_id}`} style={{ textDecoration: 'none' }}>
+                  <div style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', padding: '20px', border: '1px solid rgba(255,255,255,0.12)', transition: 'background 0.2s', cursor: 'pointer' }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.14)')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)')}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                      <span style={{ backgroundColor: C.or, color: C.vert, fontSize: '10px', fontWeight: '700', padding: '3px 8px', borderRadius: '20px', letterSpacing: '0.5px' }}>
+                        #{i + 1}
+                      </span>
+                      <span style={{ color: C.or, fontSize: '15px', fontWeight: '700' }}>{Number(r.prix).toFixed(2)} €</span>
+                    </div>
+                    <p style={{ color: 'white', fontSize: '15px', fontWeight: '700', margin: '0 0 4px', lineHeight: '1.3' }}>{r.titre}</p>
+                    <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '12px', margin: '0 0 12px', fontStyle: 'italic' }}>{r.auteur}</p>
+                    {r.genre && (
+                      <span style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontSize: '10px', padding: '2px 8px', borderRadius: '20px', marginBottom: '10px', display: 'inline-block' }}>
+                        {r.genre}
+                      </span>
+                    )}
+                    <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', margin: '10px 0 0', lineHeight: '1.5', fontStyle: 'italic' }}>{r.raison}</p>
+                  </div>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── ONGLETS ────────────────────────────────────────────────────── */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '32px', flexWrap: 'wrap' }}>
           {onglets.map(o => (
             <button key={o.id} onClick={() => setOnglet(o.id as typeof onglet)} style={{ padding: '10px 20px', borderRadius: '40px', border: 'none', cursor: 'pointer', fontSize: '14px', fontFamily: 'Georgia, serif', fontWeight: onglet === o.id ? '700' : '400', backgroundColor: onglet === o.id ? C.vert : 'white', color: onglet === o.id ? 'white' : C.texteSecondaire, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>

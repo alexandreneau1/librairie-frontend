@@ -40,6 +40,15 @@ type Avis = {
   nom: string
 }
 
+type LivreSimilaire = {
+  id: number
+  titre: string
+  auteur: string
+  isbn: string
+  prix: number
+  stock: number
+}
+
 export default function FicheLivre() {
   const params = useParams()
   const id = params.id as string
@@ -48,6 +57,7 @@ export default function FicheLivre() {
   const [avis, setAvis] = useState<Avis[]>([])
   const [moyenne, setMoyenne] = useState<string | null>(null)
   const [chargement, setChargement] = useState(true)
+  const [livresSimilaires, setLivresSimilaires] = useState<LivreSimilaire[]>([])
 
   // Réservation
   const [nom, setNom] = useState('')
@@ -73,7 +83,21 @@ export default function FicheLivre() {
   useEffect(() => {
     fetch(`http://localhost:3001/livres/${id}`)
       .then(r => r.json())
-      .then(data => { setLivre(data); setChargement(false) })
+      .then(data => {
+        setLivre(data)
+        setChargement(false)
+        // Charger les livres similaires une fois qu'on connaît le genre
+        if (data.genre) {
+          fetch(`http://localhost:3001/livres`)
+            .then(r => r.json())
+            .then((tous: LivreSimilaire[]) => {
+              const similaires = tous
+                .filter((l: any) => l.genre === data.genre && l.id !== data.id && l.stock > 0)
+                .slice(0, 4)
+              setLivresSimilaires(similaires)
+            })
+        }
+      })
 
     fetch(`http://localhost:3001/avis/${id}`)
       .then(r => r.json())
@@ -82,7 +106,6 @@ export default function FicheLivre() {
     const token = localStorage.getItem('clientToken')
     setClientConnecte(!!token)
 
-    // Vérifier wishlist
     if (token) {
       fetch('http://localhost:3001/compte/wishlist', { headers: { Authorization: 'Bearer ' + token } })
         .then(r => r.json())
@@ -91,7 +114,6 @@ export default function FicheLivre() {
         })
     }
 
-    // Init état panier
     setDansPanier(estDansPanier(parseInt(id)))
     const handlePanierChange = () => setDansPanier(estDansPanier(parseInt(id)))
     window.addEventListener('bookdog_panier_change', handlePanierChange)
@@ -291,18 +313,9 @@ export default function FicheLivre() {
                 {livre.stock > 0 ? `${livre.stock} exemplaire${livre.stock > 1 ? 's' : ''} en stock` : 'Sur commande'}
               </span>
 
-              {/* ── Bouton Ajouter au panier ── */}
               <button
                 onClick={handleAjouterPanier}
-                style={{
-                  width: '100%', padding: '14px', marginBottom: '10px',
-                  backgroundColor: ajoutAnimation ? C.vert : C.orIntense,
-                  color: 'white', border: 'none', borderRadius: '10px',
-                  fontSize: '15px', fontWeight: '700', cursor: 'pointer',
-                  fontFamily: 'Georgia, serif',
-                  transition: 'background 0.3s',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                }}
+                style={{ width: '100%', padding: '14px', marginBottom: '10px', backgroundColor: ajoutAnimation ? C.vert : C.orIntense, color: 'white', border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif', transition: 'background 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
               >
                 {ajoutAnimation ? '✓ Ajouté au panier !' : dansPanier ? '🛒 Ajouter à nouveau' : '🛒 Ajouter au panier'}
               </button>
@@ -313,7 +326,6 @@ export default function FicheLivre() {
                 </a>
               )}
 
-              {/* Wishlist */}
               <button
                 onClick={handleWishlist}
                 disabled={wishlistLoading}
@@ -349,8 +361,57 @@ export default function FicheLivre() {
               </div>
             </div>
           </div>
-
         </div>
+
+        {/* ── VOUS AIMEREZ AUSSI ───────────────────────────────────────────── */}
+        {livresSimilaires.length > 0 && (
+          <div style={{ marginTop: '64px', paddingTop: '48px', borderTop: '1px solid #eee' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '28px' }}>
+              <div>
+                <p style={{ fontSize: '11px', color: C.or, letterSpacing: '2px', fontWeight: '600', margin: '0 0 6px' }}>DANS LA MÊME VEINE</p>
+                <h2 style={{ fontSize: '22px', fontWeight: '700', color: C.texte, margin: 0 }}>Vous aimerez aussi</h2>
+              </div>
+              {livre.genre && (
+                <a href={`/livres?genre=${encodeURIComponent(livre.genre)}`} style={{ fontSize: '13px', color: C.texteSecondaire, textDecoration: 'none', border: '1px solid #ddd', borderRadius: '8px', padding: '6px 14px', backgroundColor: 'white' }}>
+                  Voir tous les {livre.genre} →
+                </a>
+              )}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '24px' }}>
+              {livresSimilaires.map(l => {
+                const couv = `https://covers.openlibrary.org/b/isbn/${l.isbn}-M.jpg`
+                return (
+                  <a key={l.id} href={`/livres/${l.id}`} style={{ textDecoration: 'none', display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ backgroundColor: C.fondAlt, borderRadius: '8px', overflow: 'hidden', height: '200px', marginBottom: '12px', boxShadow: '0 2px 12px rgba(0,0,0,0.1)', position: 'relative' }}>
+                      <img
+                        src={couv}
+                        alt={l.titre}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={e => {
+                          e.currentTarget.style.display = 'none'
+                          const ph = e.currentTarget.nextElementSibling as HTMLElement
+                          if (ph) ph.style.display = 'flex'
+                        }}
+                      />
+                      <div style={{ display: 'none', width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', position: 'absolute', top: 0, left: 0 }}>
+                        <span style={{ fontSize: '32px' }}>📚</span>
+                      </div>
+                    </div>
+                    <p style={{ fontSize: '14px', fontWeight: '700', color: C.texte, margin: '0 0 4px', lineHeight: '1.3', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{l.titre}</p>
+                    <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: '0 0 8px', fontStyle: 'italic', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{l.auteur}</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
+                      <span style={{ fontSize: '15px', fontWeight: '700', color: C.vert }}>{l.prix} €</span>
+                      <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '20px', backgroundColor: l.stock > 0 ? C.fondAlt : '#fff8e6', color: l.stock > 0 ? C.vert : C.orIntense }}>
+                        {l.stock > 0 ? 'En stock' : 'Commande'}
+                      </span>
+                    </div>
+                  </a>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
       </main>
 
       <footer style={{ backgroundColor: C.footer, padding: '24px', textAlign: 'center', marginTop: '60px' }}>
