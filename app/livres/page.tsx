@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef, startTransition } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Header from '../../components/Header'
 import { ajouterAuPanier } from '../../lib/panier'
 
@@ -91,16 +91,23 @@ type Selections = {
 
 const SELECTIONS_VIDES: Selections = { coups_de_coeur: [], prix: [], top_ventes: [] }
 
-// Cache via sessionStorage : survit aux navigations Next.js
-function getCache(): Selections | null {
-  if (typeof window === 'undefined') return null
+// ── Cache module-level ────────────────────────────────────────────────────────
+// Persiste pour toute la durée de vie du bundle JS.
+// NE PAS utiliser dans useState() — mismatch SSR/client.
+// Lire uniquement dans useEffect().
+let _moduleCache: Selections | null = null
+
+function lireCache(): Selections | null {
+  if (_moduleCache) return _moduleCache
   try {
     const raw = sessionStorage.getItem('bookdog_selections')
-    return raw ? JSON.parse(raw) : null
-  } catch { return null }
+    if (raw) { _moduleCache = JSON.parse(raw); return _moduleCache }
+  } catch {}
+  return null
 }
 
-function setCache(d: Selections) {
+function ecrireCache(d: Selections) {
+  _moduleCache = d
   try { sessionStorage.setItem('bookdog_selections', JSON.stringify(d)) } catch {}
 }
 
@@ -204,8 +211,9 @@ function SectionCarousel({ titre, sousTitre, livres, clientConnecte, wishlistIds
 
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Livres() {
-  const [selections, setSelections] = useState<Selections>(() => getCache() || SELECTIONS_VIDES)
-  const [loaded, setLoaded] = useState(() => getCache() !== null)
+  // Toujours initialisé à vide — identique serveur et client, zéro mismatch
+  const [selections, setSelections] = useState<Selections>(SELECTIONS_VIDES)
+  const [loaded, setLoaded] = useState(false)
   const [wishlistIds, setWishlistIds] = useState<Set<number>>(new Set())
   const [clientConnecte, setClientConnecte] = useState(false)
   const [panelVisible, setPanelVisible] = useState(true)
@@ -213,59 +221,39 @@ export default function Livres() {
   const [etape, setEtape] = useState(0)
   const [reponses, setReponses] = useState<Record<number, any>>({})
   const [wizardTermine, setWizardTermine] = useState(false)
-  const [recherche, setRecherche] = useState('')
   const [genreFiltre, setGenreFiltre] = useState('')
+  const [recherche, setRecherche] = useState('')
 
   useEffect(() => {
-    console.log('MOUNT')
-    return () => { console.log('UNMOUNT') }
-  }, [])
-
-  useEffect(() => {
-    const saved = localStorage.getItem('bookdog_panel_visible')
-    if (saved === 'false') setPanelVisible(false)
+    if (localStorage.getItem('bookdog_panel_visible') === 'false') setPanelVisible(false)
 
     const token = localStorage.getItem('clientToken')
     setClientConnecte(!!token)
-
     if (token) {
       fetch('http://localhost:3001/compte/wishlist', { headers: { Authorization: 'Bearer ' + token } })
         .then(r => r.json())
-        .then(data => {
-          if (Array.isArray(data)) {
-            startTransition(() => {
-              setWishlistIds(new Set(data.map((w: any) => w.livre_id)))
-            })
-          }
-        })
+        .then(data => { if (Array.isArray(data)) setWishlistIds(new Set(data.map((w: any) => w.livre_id))) })
+        .catch(() => {})
     }
 
-    // Si on a déjà le cache sessionStorage, pas besoin de refetch
-    const cached = getCache()
+    // Lecture du cache module dans useEffect — côté client uniquement, zéro mismatch
+    const cached = lireCache()
     if (cached) {
-      startTransition(() => {
-        setSelections(cached)
-        setLoaded(true)
-      })
-      return
-    }
-
-    // Fetch avec startTransition pour forcer le rendu React 19
-    fetch('http://localhost:3001/selections?t=' + Date.now())
-      .then(r => r.json())
-      .then(d => {
-        setCache(d)
-        startTransition(() => {
+      setSelections(cached)
+      setLoaded(true)
+    } else {
+      fetch('http://localhost:3001/selections')
+        .then(r => r.json())
+        .then(d => {
+          ecrireCache(d)
           setSelections(d)
           setLoaded(true)
         })
-      })
-      .catch(() => {
-        startTransition(() => {
+        .catch(() => {
           setSelections(SELECTIONS_VIDES)
           setLoaded(true)
         })
-      })
+    }
   }, [])
 
   const togglePanel = () => {
@@ -319,10 +307,8 @@ export default function Livres() {
   return (
     <div style={{ backgroundColor: C.fond, minHeight: '100vh', fontFamily: 'Georgia, serif' }}>
       <Header pageCourante="livres" />
-
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px 80px', boxSizing: 'border-box' }}>
 
-        {/* Panel wizard */}
         <div style={{ marginBottom: '32px' }}>
           {panelVisible ? (
             <div style={{ backgroundColor: C.vert, borderRadius: '12px', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -380,10 +366,7 @@ export default function Livres() {
           )}
         </div>
 
-        {/* Layout sidebar + sélections */}
         <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '32px', alignItems: 'start' }}>
-
-          {/* Sidebar */}
           <div style={{ position: 'sticky', top: '24px' }}>
             <div style={sidebarCard}>
               <input type="text" placeholder="Titre, auteur..." value={recherche} onChange={e => setRecherche(e.target.value)}
@@ -414,7 +397,6 @@ export default function Livres() {
             </a>
           </div>
 
-          {/* Sélections */}
           <div>
             {!loaded ? (
               <div style={{ textAlign: 'center', padding: '60px 0', color: C.texteSecondaire }}>Chargement des sélections...</div>
