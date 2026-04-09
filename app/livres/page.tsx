@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import Header from '../../components/Header'
-import { ajouterAuPanier } from '../../lib/panier'
+import { ajouterAuPanier, estDansPanier, getPanier } from '../../lib/panier'
 
 const C = {
   vert: '#1A3C2E',
@@ -111,29 +111,143 @@ function ecrireCache(d: Selections) {
   try { sessionStorage.setItem('bookdog_selections', JSON.stringify(d)) } catch {}
 }
 
+// ── Trophée SVG ───────────────────────────────────────────────────────────────
+type Badge = { type: 'coeur' | 'trophee' | 'prix'; label?: string | null; rang?: number | null }
+
+function TrophéeSVG({ rang, taille = 44 }: { rang: number; taille?: number }) {
+  const h = Math.round(taille * 48 / 44)
+  return (
+    <svg width={taille} height={h} viewBox="0 0 44 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8 4 H36 L32 24 Q30 32 22 34 Q14 32 12 24 Z" fill="#B07D4E" />
+      <path d="M12 6 H20 L18 20 Q16 26 13 28 Q10 22 12 6 Z" fill="rgba(255,255,255,0.15)" />
+      <path d="M8 8 Q2 8 2 16 Q2 22 8 22" stroke="#8C6239" strokeWidth="3" fill="none" strokeLinecap="round"/>
+      <path d="M36 8 Q42 8 42 16 Q42 22 36 22" stroke="#8C6239" strokeWidth="3" fill="none" strokeLinecap="round"/>
+      <rect x="17" y="34" width="10" height="6" fill="#8C6239" rx="1"/>
+      <rect x="13" y="40" width="18" height="4" fill="#8C6239" rx="2"/>
+      <text x="22" y="22" textAnchor="middle" dominantBaseline="middle" fontSize="14" fontWeight="900" fill="#F9F6F0" fontFamily="Georgia, serif">{rang}</text>
+    </svg>
+  )
+}
+
+function LauriersSVG({ taille = 44 }: { taille?: number }) {
+  return (
+    <svg width={taille} height={taille} viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M22 38 Q8 30 6 20 Q5 12 8 8" stroke="#2D6347" strokeWidth="1.5" fill="none"/>
+      <ellipse cx="8" cy="9" rx="5" ry="2.5" fill="#2D6347" transform="rotate(-40 8 9)"/>
+      <ellipse cx="8" cy="16" rx="5" ry="2.5" fill="#3B7A57" transform="rotate(-25 8 16)"/>
+      <ellipse cx="10" cy="23" rx="5" ry="2.5" fill="#2D6347" transform="rotate(-12 10 23)"/>
+      <ellipse cx="14" cy="30" rx="5" ry="2.5" fill="#3B7A57" transform="rotate(0 14 30)"/>
+      <ellipse cx="19" cy="36" rx="5" ry="2.5" fill="#2D6347" transform="rotate(12 19 36)"/>
+      <path d="M22 38 Q36 30 38 20 Q39 12 36 8" stroke="#2D6347" strokeWidth="1.5" fill="none"/>
+      <ellipse cx="36" cy="9" rx="5" ry="2.5" fill="#2D6347" transform="rotate(40 36 9)"/>
+      <ellipse cx="36" cy="16" rx="5" ry="2.5" fill="#3B7A57" transform="rotate(25 36 16)"/>
+      <ellipse cx="34" cy="23" rx="5" ry="2.5" fill="#2D6347" transform="rotate(12 34 23)"/>
+      <ellipse cx="30" cy="30" rx="5" ry="2.5" fill="#3B7A57" transform="rotate(0 30 30)"/>
+      <ellipse cx="25" cy="36" rx="5" ry="2.5" fill="#2D6347" transform="rotate(-12 25 36)"/>
+      <ellipse cx="22" cy="5" rx="5" ry="2.5" fill="#2D6347"/>
+      <path d="M17 38 Q22 42 27 38" stroke="#8C6239" strokeWidth="1.5" fill="none"/>
+    </svg>
+  )
+}
+
+function BadgesMultiples({ badges }: { badges: Badge[] }) {
+  const [hover, setHover] = useState(false)
+  const tooltip = badges.map(b => {
+    if (b.type === 'trophee') return `Top ${b.rang} des ventes en France`
+    if (b.type === 'coeur') return b.label ? `Coup de cœur — ${b.label}` : 'Coup de cœur'
+    if (b.type === 'prix') return b.label ? `Prix littéraire — ${b.label}` : 'Prix littéraire'
+    return ''
+  }).join(' · ')
+
+  return (
+    <div
+      style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '8px', cursor: 'default' }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+    >
+      {badges.map((b, i) => (
+        <span key={i} style={{ display: 'flex', alignItems: 'center' }}>
+          {b.type === 'trophee' && <TrophéeSVG rang={b.rang!} taille={28} />}
+          {b.type === 'coeur' && <span style={{ fontSize: '22px', lineHeight: 1 }}>❤️</span>}
+          {b.type === 'prix' && <LauriersSVG taille={28} />}
+        </span>
+      ))}
+      {hover && (
+        <div style={{
+          position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+          backgroundColor: C.vert, color: 'white', fontSize: '11px', fontWeight: '600',
+          padding: '6px 10px', borderRadius: '6px', whiteSpace: 'nowrap', zIndex: 10,
+          boxShadow: '0 2px 8px rgba(0,0,0,0.2)', pointerEvents: 'none',
+        }}>
+          {tooltip}
+          <div style={{ position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)', borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `5px solid ${C.vert}` }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Carte livre ───────────────────────────────────────────────────────────────
-function CarteLivre({ livre, label, clientConnecte, wishlistIds, onWishlist }: {
+function CarteLivre({ livre, badges, clientConnecte, wishlistIds, onWishlist }: {
   livre: SelectionLivre
-  label?: string | null
+  badges: Badge[]
   clientConnecte: boolean
   wishlistIds: Set<number>
   onWishlist: (id: number, inList: boolean) => void
 }) {
   const [imgOk, setImgOk] = useState(true)
   const [ajout, setAjout] = useState(false)
+  const [dansPanier, setDansPanier] = useState(false)
   const inWishlist = wishlistIds.has(livre.livre_id)
   const couverture = `https://covers.openlibrary.org/b/isbn/${livre.isbn}-M.jpg`
+  const badgeUnique = badges.length === 1 ? badges[0] : null
+
+  useEffect(() => {
+    setDansPanier(estDansPanier(livre.livre_id))
+    const handler = () => setDansPanier(estDansPanier(livre.livre_id))
+    window.addEventListener('bookdog_panier_change', handler)
+    return () => window.removeEventListener('bookdog_panier_change', handler)
+  }, [livre.livre_id])
 
   const handlePanier = (e: React.MouseEvent) => {
     e.preventDefault()
+    if (dansPanier) {
+      const panier = getPanier()
+      const article = panier.find(a => a.livre_id === livre.livre_id)
+      const qteActuelle = article?.quantite || 1
+      if (!confirm(`"${livre.titre}" est déjà dans votre panier (${qteActuelle} ex.). Ajouter un exemplaire supplémentaire ?`)) return
+    }
     ajouterAuPanier({ livre_id: livre.livre_id, titre: livre.titre, auteur: livre.auteur, isbn: livre.isbn, prix: livre.prix, stock: livre.stock })
     setAjout(true)
+    setDansPanier(true)
     setTimeout(() => setAjout(false), 1500)
   }
 
   return (
-    <a href={`/livres/${livre.livre_id}`} style={{ textDecoration: 'none', flexShrink: 0, width: '160px', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'relative', width: '160px', height: '220px', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', backgroundColor: C.fondAlt, marginBottom: '10px', flexShrink: 0 }}>
+    <a href={`/livres/${livre.livre_id}`} style={{ textDecoration: 'none', flexShrink: 0, width: '170px', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Badges au-dessus de l'image */}
+      {badges.length > 1 && <BadgesMultiples badges={badges} />}
+      {badgeUnique?.type === 'trophee' && badgeUnique.rang && (
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>
+          <TrophéeSVG rang={badgeUnique.rang} />
+        </div>
+      )}
+      {badgeUnique?.type === 'coeur' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', padding: '0 2px' }}>
+          <span style={{ fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>❤️</span>
+          <p style={{ color: C.vert, fontSize: '13px', fontWeight: '700', margin: 0, lineHeight: '1.2', fontStyle: 'italic' }}>{badgeUnique.label}</p>
+        </div>
+      )}
+      {badgeUnique?.type === 'prix' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', padding: '0 2px' }}>
+          <LauriersSVG taille={36} />
+          <p style={{ color: '#2D6347', fontSize: '12px', fontWeight: '700', margin: 0, lineHeight: '1.2', fontStyle: 'italic' }}>{badgeUnique.label || 'Prix littéraire'}</p>
+        </div>
+      )}
+
+      {/* Image */}
+      <div style={{ width: '170px', height: '240px', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', backgroundColor: C.fondAlt, marginBottom: '10px', flexShrink: 0 }}>
         {imgOk ? (
           <img src={couverture} alt={livre.titre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setImgOk(false)} />
         ) : (
@@ -142,30 +256,26 @@ function CarteLivre({ livre, label, clientConnecte, wishlistIds, onWishlist }: {
             <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: 0, fontStyle: 'italic', lineHeight: '1.3' }}>{livre.titre}</p>
           </div>
         )}
-        {label && (
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(26,60,46,0.95))', padding: '20px 8px 8px' }}>
-            <p style={{ color: C.or, fontSize: '10px', margin: 0, lineHeight: '1.3', fontStyle: 'italic' }}>{label}</p>
-          </div>
-        )}
       </div>
-      <p style={{ fontSize: '13px', fontWeight: '700', color: C.texte, margin: '0 0 2px', lineHeight: '1.3', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{livre.titre}</p>
-      <p style={{ fontSize: '11px', color: C.texteSecondaire, margin: '0 0 8px', fontStyle: 'italic', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{livre.auteur}</p>
+
+      <p style={{ fontSize: '14px', fontWeight: '700', color: C.texte, margin: '0 0 3px', lineHeight: '1.3', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{livre.titre}</p>
+      <p style={{ fontSize: '13px', color: C.texteSecondaire, margin: '0 0 8px', fontStyle: 'italic', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{livre.auteur}</p>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-        <span style={{ fontSize: '15px', fontWeight: '700', color: C.vert }}>{livre.prix} €</span>
-        <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 7px', borderRadius: '20px', backgroundColor: livre.stock > 0 ? C.fondAlt : '#fff8e6', color: livre.stock > 0 ? C.vert : C.orIntense }}>
+        <span style={{ fontSize: '16px', fontWeight: '700', color: C.vert }}>{livre.prix} €</span>
+        <span style={{ fontSize: '11px', fontWeight: '600', color: livre.stock > 0 ? C.vert : C.orIntense }}>
           {livre.stock > 0 ? 'En stock' : 'Commande'}
         </span>
       </div>
       <div style={{ display: 'flex', gap: '6px' }} onClick={e => e.preventDefault()}>
         <button
           onClick={e => { e.preventDefault(); if (!clientConnecte) { window.location.href = '/compte/connexion'; return } onWishlist(livre.livre_id, inWishlist) }}
-          style={{ flex: 1, padding: '6px 0', border: `1px solid ${inWishlist ? C.or : '#ddd'}`, borderRadius: '6px', backgroundColor: inWishlist ? '#fff8e6' : 'white', color: inWishlist ? C.orIntense : C.texteSecondaire, fontSize: '13px', cursor: 'pointer' }}
+          style={{ flex: 1, padding: '7px 0', border: `1px solid ${inWishlist ? C.or : '#ddd'}`, borderRadius: '6px', backgroundColor: inWishlist ? '#fff8e6' : 'white', color: inWishlist ? C.orIntense : C.texteSecondaire, fontSize: '14px', cursor: 'pointer' }}
         >
           {inWishlist ? '♥' : '♡'}
         </button>
         <button
           onClick={handlePanier}
-          style={{ flex: 1, padding: '6px 0', border: `1px solid ${ajout ? C.vert : '#ddd'}`, borderRadius: '6px', backgroundColor: ajout ? C.fondAlt : 'white', color: ajout ? C.vert : C.texteSecondaire, fontSize: '12px', cursor: 'pointer', fontWeight: ajout ? '700' : '400', transition: 'all 0.2s' }}
+          style={{ flex: 1, padding: '7px 0', border: `1px solid ${ajout ? C.vert : dansPanier ? C.or : '#ddd'}`, borderRadius: '6px', backgroundColor: ajout ? C.fondAlt : dansPanier ? '#fff8e6' : 'white', color: ajout ? C.vert : dansPanier ? C.orIntense : C.texteSecondaire, fontSize: '14px', cursor: 'pointer', fontWeight: ajout || dansPanier ? '700' : '400', transition: 'all 0.2s' }}
         >
           {ajout ? '✓' : '🛒'}
         </button>
@@ -175,10 +285,11 @@ function CarteLivre({ livre, label, clientConnecte, wishlistIds, onWishlist }: {
 }
 
 // ── Carousel ──────────────────────────────────────────────────────────────────
-function SectionCarousel({ titre, sousTitre, livres, clientConnecte, wishlistIds, onWishlist, accentColor }: {
+function SectionCarousel({ titre, sousTitre, livres, badgesMap, clientConnecte, wishlistIds, onWishlist, accentColor }: {
   titre: string
   sousTitre?: string
   livres: SelectionLivre[]
+  badgesMap: Map<number, Badge[]>
   clientConnecte: boolean
   wishlistIds: Set<number>
   onWishlist: (id: number, inList: boolean) => void
@@ -190,19 +301,27 @@ function SectionCarousel({ titre, sousTitre, livres, clientConnecte, wishlistIds
 
   return (
     <div style={{ marginBottom: '48px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '16px', borderBottom: `2px solid ${accentColor || C.vert}`, paddingBottom: '10px' }}>
-        <div>
-          <h2 style={{ fontSize: '18px', fontWeight: '700', color: C.texte, margin: '0 0 2px' }}>{titre}</h2>
-          {sousTitre && <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: 0 }}>{sousTitre}</p>}
+      {titre && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '16px', borderBottom: `2px solid ${accentColor || C.vert}`, paddingBottom: '10px' }}>
+          <div>
+            <h2 style={{ fontSize: '18px', fontWeight: '700', color: C.texte, margin: '0 0 2px' }}>{titre}</h2>
+            {sousTitre && <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: 0 }}>{sousTitre}</p>}
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button onClick={() => scroll('left')} style={{ width: '30px', height: '30px', borderRadius: '50%', border: '1px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.texteSecondaire }}>‹</button>
+            <button onClick={() => scroll('right')} style={{ width: '30px', height: '30px', borderRadius: '50%', border: '1px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.texteSecondaire }}>›</button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
+      )}
+      {!titre && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginBottom: '12px' }}>
           <button onClick={() => scroll('left')} style={{ width: '30px', height: '30px', borderRadius: '50%', border: '1px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.texteSecondaire }}>‹</button>
           <button onClick={() => scroll('right')} style={{ width: '30px', height: '30px', borderRadius: '50%', border: '1px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.texteSecondaire }}>›</button>
         </div>
-      </div>
+      )}
       <div ref={scrollRef} style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '8px', scrollbarWidth: 'none' }}>
         {livres.map(l => (
-          <CarteLivre key={l.id} livre={l} label={l.label} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={onWishlist} />
+          <CarteLivre key={l.id} livre={l} badges={badgesMap.get(l.livre_id) || []} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={onWishlist} />
         ))}
       </div>
     </div>
@@ -224,8 +343,21 @@ export default function Livres() {
   const [genreFiltre, setGenreFiltre] = useState('')
   const [recherche, setRecherche] = useState('')
 
+  const changerGenre = (genre: string) => {
+    setGenreFiltre(genre)
+    const url = new URL(window.location.href)
+    if (genre) url.searchParams.set('genre', genre)
+    else url.searchParams.delete('genre')
+    window.history.replaceState(null, '', url.toString())
+  }
+
   useEffect(() => {
     if (localStorage.getItem('bookdog_panel_visible') === 'false') setPanelVisible(false)
+
+    // Lire le genre depuis l'URL (?genre=Policier)
+    const params = new URLSearchParams(window.location.search)
+    const genreUrl = params.get('genre')
+    if (genreUrl) setGenreFiltre(decodeURIComponent(genreUrl))
 
     const token = localStorage.getItem('clientToken')
     setClientConnecte(!!token)
@@ -269,14 +401,14 @@ export default function Livres() {
     if (etape < ETAPES.length - 1) {
       setEtape(etape + 1)
     } else {
-      if (nr[0]?.genres?.length) setGenreFiltre(nr[0].genres[0])
+      if (nr[0]?.genres?.length) changerGenre(nr[0].genres[0])
       setWizardTermine(true)
       setWizardOuvert(false)
     }
   }
 
   const resetWizard = () => {
-    setEtape(0); setReponses({}); setWizardTermine(false); setWizardOuvert(true); setGenreFiltre('')
+    setEtape(0); setReponses({}); setWizardTermine(false); setWizardOuvert(true); changerGenre('')
   }
 
   async function toggleWishlist(livre_id: number, inList: boolean) {
@@ -375,19 +507,19 @@ export default function Livres() {
             {genreFiltre && (
               <div style={{ backgroundColor: C.fondAlt, borderRadius: '10px', padding: '10px 14px', marginBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: '13px', color: C.vert, fontWeight: '600' }}>{genreFiltre}</span>
-                <button onClick={() => { setGenreFiltre(''); setWizardTermine(false); setEtape(0); setReponses({}) }} style={{ background: 'none', border: 'none', color: C.texteSecondaire, cursor: 'pointer', fontSize: '14px', padding: 0 }}>✕</button>
+                <button onClick={() => { changerGenre(''); setWizardTermine(false); setEtape(0); setReponses({}) }} style={{ background: 'none', border: 'none', color: C.texteSecondaire, cursor: 'pointer', fontSize: '14px', padding: 0 }}>✕</button>
               </div>
             )}
             <div style={sidebarCard}>
               <p style={sectionLabel}>GENRE</p>
               {['Roman', 'Policier', 'Thriller', 'Science-fiction', 'Fantasy', 'Histoire', 'Biographie', 'Essai', 'Jeunesse', 'Bande dessinée', 'Poésie', 'Romance', 'Développement personnel', 'Philosophie'].map(g => (
                 <label key={g} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', cursor: 'pointer', fontSize: '13px', color: genreFiltre === g ? C.vert : C.texte, fontWeight: genreFiltre === g ? '700' : '400' }}>
-                  <input type="radio" name="genre" checked={genreFiltre === g} onChange={() => setGenreFiltre(g)} style={{ accentColor: C.vert }} />
+                  <input type="radio" name="genre" checked={genreFiltre === g} onChange={() => changerGenre(g)} style={{ accentColor: C.vert }} />
                   {g}
                 </label>
               ))}
               {genreFiltre && (
-                <button onClick={() => setGenreFiltre('')} style={{ marginTop: '4px', background: 'none', border: 'none', color: C.texteSecondaire, fontSize: '12px', cursor: 'pointer', fontFamily: 'Georgia, serif', textDecoration: 'underline', padding: 0 }}>
+                <button onClick={() => changerGenre('')} style={{ marginTop: '4px', background: 'none', border: 'none', color: C.texteSecondaire, fontSize: '12px', cursor: 'pointer', fontFamily: 'Georgia, serif', textDecoration: 'underline', padding: 0 }}>
                   Tous les genres
                 </button>
               )}
@@ -402,16 +534,35 @@ export default function Livres() {
               <div style={{ textAlign: 'center', padding: '60px 0', color: C.texteSecondaire }}>Chargement des sélections...</div>
             ) : (
               <>
-                <SectionCarousel titre="Coups de cœur de vos libraires" sousTitre="Une sélection passionnée, renouvelée chaque semaine" livres={filtrerLivres(selections.coups_de_coeur)} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={toggleWishlist} accentColor={C.vert} />
-                <SectionCarousel titre="Top ventes" sousTitre="Les titres les plus demandés en ce moment" livres={filtrerLivres(selections.top_ventes)} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={toggleWishlist} accentColor={C.or} />
-                <SectionCarousel titre="Récompensés" sousTitre="Prix littéraires et distinctions" livres={filtrerLivres(selections.prix)} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={toggleWishlist} accentColor="#8B4513" />
-                {selections.coups_de_coeur.length === 0 && selections.top_ventes.length === 0 && selections.prix.length === 0 && (
-                  <div style={{ textAlign: 'center', padding: '80px 0' }}>
-                    <p style={{ fontSize: '40px', marginBottom: '12px' }}>📚</p>
-                    <p style={{ color: C.texteSecondaire, fontSize: '16px', margin: '0 0 8px' }}>Aucune sélection pour le moment</p>
-                    <p style={{ color: '#bbb', fontSize: '13px' }}>Ajoutez des livres depuis le dashboard admin → onglet Sélections</p>
-                  </div>
-                )}
+                {(() => {
+                  const badgesMap = new Map<number, Badge[]>()
+                  const ajouter = (l: SelectionLivre, badge: Badge) => {
+                    const existing = badgesMap.get(l.livre_id) || []
+                    badgesMap.set(l.livre_id, [...existing, badge])
+                  }
+                  selections.coups_de_coeur.forEach(l => ajouter(l, { type: 'coeur', label: l.label }))
+                  selections.top_ventes.forEach(l => ajouter(l, { type: 'trophee', rang: l.rang, label: l.label }))
+                  selections.prix.forEach(l => ajouter(l, { type: 'prix', label: l.label }))
+
+                  // Dédoublonner par livre_id pour n'afficher chaque livre qu'une fois
+                  const vus = new Set<number>()
+                  const tousLesLivres: SelectionLivre[] = []
+                  ;[...selections.coups_de_coeur, ...selections.top_ventes, ...selections.prix].forEach(l => {
+                    if (!vus.has(l.livre_id)) { vus.add(l.livre_id); tousLesLivres.push(l) }
+                  })
+
+                  const livresFiltres = filtrerLivres(tousLesLivres)
+
+                  if (livresFiltres.length === 0) return (
+                    <div style={{ textAlign: 'center', padding: '80px 0' }}>
+                      <p style={{ fontSize: '40px', marginBottom: '12px' }}>📚</p>
+                      <p style={{ color: C.texteSecondaire, fontSize: '16px', margin: '0 0 8px' }}>Aucune sélection pour le moment</p>
+                      <p style={{ color: '#bbb', fontSize: '13px' }}>Ajoutez des livres depuis le dashboard admin → onglet Sélections</p>
+                    </div>
+                  )
+
+                  return <SectionCarousel titre="" livres={livresFiltres} badgesMap={badgesMap} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={toggleWishlist} accentColor="transparent" />
+                })()}
               </>
             )}
           </div>

@@ -10,7 +10,7 @@ const C = {
 }
 
 type Props = {
-  pageCourante?: 'accueil' | 'livres' | 'click-collect' | 'compte' | 'panier' | 'entreprises' | 'evenements'
+  pageCourante?: 'accueil' | 'livres' | 'compte' | 'panier' | 'entreprises' | 'evenements'
 }
 
 export default function Header({ pageCourante }: Props) {
@@ -73,36 +73,24 @@ export default function Header({ pageCourante }: Props) {
         }
       `}</style>
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '24px 24px 0', boxSizing: 'border-box' }}>
-
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.15)' }}>
-
           <a href="/" style={{ textDecoration: 'none' }}>
             <h1 style={{ color: 'white', fontSize: '28px', fontWeight: '700', margin: 0, letterSpacing: '2px' }}>BOOKDOG</h1>
             <p style={{ color: C.fondAlt, fontSize: '12px', margin: '2px 0 0', letterSpacing: '1px' }}>Librairie indépendante — Paris 17e</p>
           </a>
-
           <nav className="bd-nav" style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <a href="/" className={`bd-lien${pageCourante === 'accueil' ? ' actif' : ''}`}>Accueil</a>
             <a href="/livres" className={`bd-lien${pageCourante === 'livres' ? ' actif' : ''}`}>Catalogue</a>
             <a href="/evenements" className={`bd-lien${pageCourante === 'evenements' ? ' actif' : ''}`}>Événements</a>
-            <a href="/click-collect" className={`bd-lien${pageCourante === 'click-collect' ? ' actif' : ''}`}>Click & Collect</a>
             <a href="/entreprises" className="bd-btob">Espace Pro</a>
             <a href={clientConnecte ? '/compte/dashboard' : '/compte/connexion'} className={`bd-lien${pageCourante === 'compte' ? ' actif' : ''}`}>
               {clientConnecte && prenomClient ? prenomClient : 'Mon compte'}
             </a>
-
             <a href="/panier" style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
+              display: 'flex', alignItems: 'center', gap: '6px',
               backgroundColor: nbArticles > 0 ? C.or : 'rgba(255,255,255,0.1)',
-              color: 'white',
-              padding: '6px 14px',
-              borderRadius: '40px',
-              textDecoration: 'none',
-              fontWeight: '700',
-              fontSize: '14px',
-              marginLeft: '4px',
+              color: 'white', padding: '6px 14px', borderRadius: '40px',
+              textDecoration: 'none', fontWeight: '700', fontSize: '14px', marginLeft: '4px',
             }}>
               🛒
               {nbArticles > 0 && (
@@ -113,7 +101,6 @@ export default function Header({ pageCourante }: Props) {
             </a>
           </nav>
         </div>
-
         <div style={{ padding: '14px 0', display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
           <a href={`https://www.google.com/maps/search/?api=1&query=${adresseMap}`} target="_blank" rel="noopener noreferrer" style={{ color: C.fondAlt, textDecoration: 'none', fontSize: '13px' }}>
             📍 42 rue Laugier, 75017 Paris

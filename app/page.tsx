@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Header from '../components/Header'
-import { ajouterAuPanier } from '../lib/panier'
+import { ajouterAuPanier, estDansPanier, getPanier } from '../lib/panier'
 
 const C = {
   vert: '#1A3C2E',
@@ -50,57 +50,87 @@ type Recommandation = {
   raison: string
 }
 
+function TrophéeSVG({ rang }: { rang: number }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '6px' }}>
+      <svg width="44" height="48" viewBox="0 0 44 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 4 H36 L32 24 Q30 32 22 34 Q14 32 12 24 Z" fill="#B07D4E" />
+        <path d="M12 6 H20 L18 20 Q16 26 13 28 Q10 22 12 6 Z" fill="rgba(255,255,255,0.15)" />
+        <path d="M8 8 Q2 8 2 16 Q2 22 8 22" stroke="#8C6239" strokeWidth="3" fill="none" strokeLinecap="round"/>
+        <path d="M36 8 Q42 8 42 16 Q42 22 36 22" stroke="#8C6239" strokeWidth="3" fill="none" strokeLinecap="round"/>
+        <rect x="17" y="34" width="10" height="6" fill="#8C6239" rx="1"/>
+        <rect x="13" y="40" width="18" height="4" fill="#8C6239" rx="2"/>
+        <text x="22" y="22" textAnchor="middle" dominantBaseline="middle" fontSize="14" fontWeight="900" fill="#F9F6F0" fontFamily="Georgia, serif">{rang}</text>
+      </svg>
+    </div>
+  )
+}
+
 function CarteLivre({ livre, label, rang }: { livre: SelectionLivre; label?: string | null; rang?: number | null }) {
   const [imgOk, setImgOk] = useState(true)
   const [ajout, setAjout] = useState(false)
+  const [dansPanier, setDansPanier] = useState(false)
   const couverture = `https://covers.openlibrary.org/b/isbn/${livre.isbn}-M.jpg`
+
+  useEffect(() => {
+    setDansPanier(estDansPanier(livre.livre_id))
+    const handler = () => setDansPanier(estDansPanier(livre.livre_id))
+    window.addEventListener('bookdog_panier_change', handler)
+    return () => window.removeEventListener('bookdog_panier_change', handler)
+  }, [livre.livre_id])
 
   const handlePanier = (e: React.MouseEvent) => {
     e.preventDefault()
+    if (dansPanier) {
+      const panier = getPanier()
+      const article = panier.find(a => a.livre_id === livre.livre_id)
+      const qteActuelle = article?.quantite || 1
+      if (!confirm(`"${livre.titre}" est déjà dans votre panier (${qteActuelle} ex.). Ajouter un exemplaire supplémentaire ?`)) return
+    }
     ajouterAuPanier({ livre_id: livre.livre_id, titre: livre.titre, auteur: livre.auteur, isbn: livre.isbn, prix: livre.prix, stock: livre.stock })
     setAjout(true)
+    setDansPanier(true)
     setTimeout(() => setAjout(false), 1500)
   }
 
   return (
-    <a href={`/livres/${livre.livre_id}`} style={{ textDecoration: 'none', flexShrink: 0, width: '150px', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'relative', width: '150px', height: '210px', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', backgroundColor: C.fondAlt, marginBottom: '10px' }}>
+    <a href={`/livres/${livre.livre_id}`} style={{ textDecoration: 'none', flexShrink: 0, width: '170px', display: 'flex', flexDirection: 'column' }}>
+
+      {/* Badge au-dessus de l'image */}
+      {rang && <TrophéeSVG rang={rang} />}
+      {label && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', padding: '0 2px' }}>
+          <span style={{ fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>❤️</span>
+          <p style={{ color: C.vert, fontSize: '13px', fontWeight: '700', margin: 0, lineHeight: '1.2', fontStyle: 'italic' }}>{label}</p>
+        </div>
+      )}
+
+      {/* Image */}
+      <div style={{ width: '170px', height: '240px', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', backgroundColor: C.fondAlt, marginBottom: '10px', flexShrink: 0 }}>
         {imgOk ? (
           <img src={couverture} alt={livre.titre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setImgOk(false)} />
         ) : (
           <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '12px', boxSizing: 'border-box', textAlign: 'center' }}>
-            <span style={{ fontSize: '28px', marginBottom: '8px' }}>📚</span>
-            <p style={{ fontSize: '11px', color: C.texteSecondaire, margin: 0, fontStyle: 'italic', lineHeight: '1.3' }}>{livre.titre}</p>
-          </div>
-        )}
-        {rang && (
-          <div style={{ position: 'absolute', top: '8px', left: '8px', textAlign: 'center' }}>
-            <div style={{ position: 'relative', display: 'inline-block' }}>
-              <span style={{ fontSize: '32px', lineHeight: 1 }}>🏆</span>
-              <span style={{ position: 'absolute', top: '8px', left: '50%', transform: 'translateX(-50%)', fontSize: '11px', fontWeight: '900', color: C.vert, lineHeight: 1 }}>{rang}</span>
-            </div>
-          </div>
-        )}
-        {label && (
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(transparent, rgba(0,0,0,0.85))', padding: '20px 8px 10px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <span style={{ fontSize: '14px', lineHeight: 1 }}>❤️</span>
-            <p style={{ color: 'white', fontSize: '12px', fontWeight: '600', margin: 0, lineHeight: '1.3', textShadow: '0 1px 2px rgba(0,0,0,0.5)', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{label}</p>
+            <span style={{ fontSize: '32px', marginBottom: '8px' }}>📚</span>
+            <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: 0, fontStyle: 'italic', lineHeight: '1.4' }}>{livre.titre}</p>
           </div>
         )}
       </div>
-      <p style={{ fontSize: '14px', fontWeight: '700', color: C.texte, margin: '0 0 4px', lineHeight: '1.3', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{livre.titre}</p>
-      <p style={{ fontSize: '13px', color: C.texteSecondaire, margin: '0 0 8px', fontStyle: 'italic', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{livre.auteur}</p>
+
+      {/* Infos */}
+      <p style={{ fontSize: '14px', fontWeight: '700', color: C.texte, margin: '0 0 3px', lineHeight: '1.3', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{livre.titre}</p>
+      <p style={{ fontSize: '13px', color: C.texteSecondaire, margin: '0 0 10px', fontStyle: 'italic', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{livre.auteur}</p>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
         <span style={{ fontSize: '16px', fontWeight: '700', color: C.vert }}>{livre.prix} €</span>
-        <span style={{ fontSize: '12px', fontWeight: '600', padding: '3px 8px', borderRadius: '20px', backgroundColor: livre.stock > 0 ? C.fondAlt : '#fff8e6', color: livre.stock > 0 ? C.vert : C.orIntense }}>
+        <span style={{ fontSize: '11px', fontWeight: '600', color: livre.stock > 0 ? C.vert : C.orIntense }}>
           {livre.stock > 0 ? 'En stock' : 'Commande'}
         </span>
       </div>
       <button
         onClick={handlePanier}
-        style={{ width: '100%', padding: '7px 0', border: `1px solid ${ajout ? C.vert : '#ddd'}`, borderRadius: '6px', backgroundColor: ajout ? C.fondAlt : 'white', color: ajout ? C.vert : C.texteSecondaire, fontSize: '13px', cursor: 'pointer', fontWeight: ajout ? '700' : '400', transition: 'all 0.2s', fontFamily: 'Georgia, serif' }}
+        style={{ width: '100%', padding: '8px 0', border: `1px solid ${ajout ? C.vert : dansPanier ? C.or : '#ddd'}`, borderRadius: '6px', backgroundColor: ajout ? C.fondAlt : dansPanier ? '#fff8e6' : 'white', color: ajout ? C.vert : dansPanier ? C.orIntense : C.texteSecondaire, fontSize: '14px', cursor: 'pointer', fontWeight: ajout || dansPanier ? '700' : '400', transition: 'all 0.2s', fontFamily: 'Georgia, serif' }}
       >
-        {ajout ? '✓ Ajouté' : '🛒 Panier'}
+        {ajout ? '✓ Ajouté' : dansPanier ? '🛒 Dans le panier' : '🛒 Panier'}
       </button>
     </a>
   )
