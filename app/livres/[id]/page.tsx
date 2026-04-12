@@ -29,6 +29,7 @@ type Livre = {
   collection: string | null
   date_publication: string | null
   url_goodreads: string | null
+  delai_reappro: number | null
 }
 
 type Avis = {
@@ -86,7 +87,6 @@ export default function FicheLivre() {
       .then(data => {
         setLivre(data)
         setChargement(false)
-        // Charger les livres similaires une fois qu'on connaît le genre
         if (data.genre) {
           fetch(`http://localhost:3001/livres`)
             .then(r => r.json())
@@ -129,6 +129,7 @@ export default function FicheLivre() {
       isbn: livre.isbn,
       prix: livre.prix,
       stock: livre.stock,
+      delai_reappro: livre.delai_reappro,
     })
     setAjoutAnimation(true)
     setTimeout(() => setAjoutAnimation(false), 1500)
@@ -310,7 +311,11 @@ export default function FicheLivre() {
 
               <p style={{ fontSize: '36px', fontWeight: '700', color: C.vert, margin: '0 0 8px' }}>{livre.prix} €</p>
               <span style={{ display: 'inline-block', fontSize: '13px', fontWeight: '600', padding: '5px 14px', borderRadius: '20px', marginBottom: '28px', backgroundColor: livre.stock > 0 ? C.fondAlt : '#fff8e6', color: livre.stock > 0 ? C.vert : C.orIntense }}>
-                {livre.stock > 0 ? `${livre.stock} exemplaire${livre.stock > 1 ? 's' : ''} en stock` : 'Sur commande'}
+                {livre.stock > 0
+                  ? `${livre.stock} exemplaire${livre.stock > 1 ? 's' : ''} en stock`
+                  : livre.delai_reappro
+                    ? `Sur commande — ${livre.delai_reappro} jour${livre.delai_reappro > 1 ? 's' : ''}`
+                    : 'Sur commande'}
               </span>
 
               <button

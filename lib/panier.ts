@@ -7,6 +7,7 @@ export type ArticlePanier = {
   prix: number
   stock: number
   quantite: number
+  delai_reappro?: number | null
 }
 
 const CLE = 'bookdog_panier'

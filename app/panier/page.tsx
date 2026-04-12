@@ -35,6 +35,17 @@ type ClientInfo = {
   email: string
 }
 
+// ── Helpers délai ─────────────────────────────────────────────────────────────
+function labelDelai(delai: number | null | undefined): string {
+  if (delai != null && delai > 0) return `sous ${delai} jour${delai > 1 ? 's' : ''}`
+  return 'délai sur demande'
+}
+
+function labelDelaiConfirmation(delai: number | null | undefined): string {
+  if (delai != null && delai > 0) return `Sur commande (${delai} jour${delai > 1 ? 's' : ''})`
+  return 'Sur commande (délai sur demande)'
+}
+
 export default function PagePanier() {
   const [panier, setPanier] = useState<ArticlePanier[]>([])
   const [total, setTotal] = useState(0)
@@ -58,7 +69,6 @@ export default function PagePanier() {
   useEffect(() => {
     syncPanier()
 
-    // Vérifier si client connecté
     const info = localStorage.getItem('clientInfo')
     const token = localStorage.getItem('clientToken')
     if (info && token) {
@@ -118,7 +128,6 @@ export default function PagePanier() {
     }
   }
 
-  // Si client connecté, passer directement les coordonnées et valider
   const handleCommanderConnecte = async () => {
     setErreur('')
     setChargement(true)
@@ -148,6 +157,9 @@ export default function PagePanier() {
     }
   }
 
+  // Articles nécessitant un réapprovisionnement
+  const articlesEnReappro = panier.filter(a => a.stock === 0 || a.quantite > a.stock)
+
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '12px 16px', borderRadius: '8px',
     border: '1px solid #ddd', fontSize: '15px',
@@ -173,7 +185,6 @@ export default function PagePanier() {
             const labels: Record<Etape, string> = { panier: 'Panier', coordonnees: 'Coordonnées', confirmation: 'Confirmation' }
             const actif = etape === e
             const passe = ['panier', 'coordonnees', 'confirmation'].indexOf(etape) > i
-            // Masquer l'étape coordonnées si client connecté
             if (e === 'coordonnees' && clientConnecte) return null
             return (
               <div key={e} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -222,12 +233,20 @@ export default function PagePanier() {
                           <p style={{ fontWeight: '700', fontSize: '16px', color: C.texte, margin: '0 0 4px' }}>{article.titre}</p>
                         </a>
                         <p style={{ fontSize: '13px', color: C.texteSecondaire, margin: '0 0 8px', fontStyle: 'italic' }}>{article.auteur}</p>
+
+                        {/* Badge stock dynamique */}
                         {article.stock === 0 ? (
-                          <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px', backgroundColor: '#fff8e6', color: C.orIntense }}>Sur commande — disponible sous 10 jours</span>
+                          <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px', backgroundColor: '#fff8e6', color: C.orIntense }}>
+                            Sur commande — disponible {labelDelai(article.delai_reappro)}
+                          </span>
                         ) : article.quantite <= article.stock ? (
-                          <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px', backgroundColor: C.fondAlt, color: C.vert }}>{article.stock} en stock</span>
+                          <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px', backgroundColor: C.fondAlt, color: C.vert }}>
+                            {article.stock} en stock
+                          </span>
                         ) : (
-                          <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px', backgroundColor: '#fff8e6', color: C.orIntense }}>{article.stock} en stock · {article.quantite - article.stock} sous 10 jours</span>
+                          <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px', backgroundColor: '#fff8e6', color: C.orIntense }}>
+                            {article.stock} en stock · {article.quantite - article.stock} {labelDelai(article.delai_reappro)}
+                          </span>
                         )}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -257,9 +276,15 @@ export default function PagePanier() {
                   <p style={{ fontSize: '12px', color: '#bbb', margin: '8px 0 0', textAlign: 'right' }}>Paiement sur place au retrait en boutique</p>
                 </div>
 
-                {panier.some(a => a.stock === 0 || a.quantite > a.stock) && (
+                {/* Bandeau réappro dynamique */}
+                {articlesEnReappro.length > 0 && (
                   <div style={{ backgroundColor: '#fff8e6', borderRadius: '10px', padding: '14px 18px', marginBottom: '20px' }}>
-                    <p style={{ color: C.orIntense, fontSize: '13px', margin: 0, fontWeight: '600' }}>⚠️ Certains exemplaires seront commandés auprès de notre distributeur. Comptez 10 jours supplémentaires.</p>
+                    <p style={{ color: C.orIntense, fontSize: '13px', margin: 0, fontWeight: '600' }}>
+                      ⚠️ Certains exemplaires seront commandés auprès de notre distributeur.{' '}
+                      {articlesEnReappro.every(a => a.delai_reappro != null)
+                        ? `Comptez ${Math.max(...articlesEnReappro.map(a => a.delai_reappro as number))} jours supplémentaires.`
+                        : 'Délai sur demande en boutique.'}
+                    </p>
                   </div>
                 )}
 
@@ -365,7 +390,7 @@ export default function PagePanier() {
                       <p style={{ fontWeight: '700', fontSize: '15px', color: C.texte, margin: '0 0 2px' }}>{l.titre}</p>
                       <p style={{ fontSize: '13px', color: C.texteSecondaire, margin: '0 0 4px', fontStyle: 'italic' }}>{l.auteur}</p>
                       <span style={{ fontSize: '11px', fontWeight: '600', padding: '2px 8px', borderRadius: '20px', backgroundColor: l.type === 'stock' ? C.fondAlt : '#fff8e6', color: l.type === 'stock' ? C.vert : C.orIntense }}>
-                        {l.type === 'stock' ? 'En stock' : 'Sur commande (10 jours)'}
+                        {l.type === 'stock' ? 'En stock' : labelDelaiConfirmation(null)}
                       </span>
                     </div>
                     <div style={{ textAlign: 'right' }}>
