@@ -698,12 +698,12 @@ function WizardPanel() {
   )
 
   return (
-    <div style={{ backgroundColor: C.vert, borderRadius: '16px', padding: '24px 32px', marginBottom: '48px' }}>
+    <div style={{ backgroundColor: C.vert, borderRadius: '14px', padding: '14px 20px', marginBottom: '28px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
         <div>
-          <p style={{ color: C.or, fontSize: '11px', letterSpacing: '2px', fontWeight: '600', margin: '0 0 3px', fontFamily: FONT }}>AIDE AU CHOIX</p>
-          <h3 style={{ color: 'white', fontSize: '18px', fontWeight: '700', margin: 0, fontFamily: FONT }}>Trouvez votre prochain livre</h3>
+          <p style={{ color: C.or, fontSize: '11px', letterSpacing: '1.5px', fontWeight: '600', margin: 0, fontFamily: FONT }}>AIDE AU CHOIX</p>
+          <h3 style={{ color: 'white', fontSize: '16px', fontWeight: '700', margin: '0 0 0 6px', fontFamily: FONT }}>Trouvez votre prochain livre</h3>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {profil && <span style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)', fontSize: '12px', padding: '4px 12px', borderRadius: '20px', fontFamily: FONT }}>{profilLabel[profil]}</span>}
@@ -747,7 +747,7 @@ function WizardPanel() {
           <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: '12px', letterSpacing: '1px', margin: '0 0 8px', fontFamily: FONT }}>
             {node.icone} {nodeId === 'start' ? 'Commençons' : `Étape ${history.length + 1}`}
           </p>
-          <p style={{ color: 'white', fontSize: '19px', fontWeight: '700', margin: '0 0 20px', fontFamily: FONT, lineHeight: '1.3' }}>{node.question}</p>
+          <p style={{ color: 'white', fontSize: '19px', fontWeight: '700', margin: '0 0 14px', fontFamily: FONT, lineHeight: '1.3' }}>{node.question}</p>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             {node.options.map((opt, i) => (
               <button key={i} onClick={() => handleOption(opt)}
