@@ -21,7 +21,7 @@ type ClientInfo = { nom: string; prenom: string; email: string; ce?: CE | null }
 
 export default function Dashboard() {
   const router = useRouter()
-  const [onglet, setOnglet] = useState<'commandes' | 'reservations' | 'achats' | 'wishlist'>('commandes')
+  const [onglet, setOnglet] = useState<'commandes' | 'reservations' | 'achats' | 'wishlist' | 'preferences'>('commandes')
   const [client, setClient] = useState<ClientInfo | null>(null)
   const [commandes, setCommandes] = useState<Commande[]>([])
   const [reservations, setReservations] = useState<Reservation[]>([])
@@ -32,6 +32,12 @@ export default function Dashboard() {
   const [chargementReco, setChargementReco] = useState(false)
   const [recoChargees, setRecoChargees] = useState(false)
 
+  // Préférences emails
+  const [emailRecommandations, setEmailRecommandations] = useState(true)
+  const [emailRelanceSaga, setEmailRelanceSaga] = useState(true)
+  const [savingPrefs, setSavingPrefs] = useState(false)
+  const [prefsSaved, setPrefsSaved] = useState(false)
+
   useEffect(() => {
     const token = localStorage.getItem('clientToken')
     const info = localStorage.getItem('clientInfo')
@@ -41,14 +47,18 @@ export default function Dashboard() {
 
     fetch('http://localhost:3001/compte/historique', { headers: { 'Authorization': 'Bearer ' + token } })
       .then(res => res.json())
-      .then(data => {
-        setCommandes(data.commandes || [])
-        setReservations(data.reservations || [])
-        setVentes(data.ventes || [])
-      })
+      .then(data => { setCommandes(data.commandes || []); setReservations(data.reservations || []); setVentes(data.ventes || []) })
+
     fetch('http://localhost:3001/compte/wishlist', { headers: { 'Authorization': 'Bearer ' + token } })
       .then(res => res.json())
       .then(data => setWishlist(data || []))
+
+    fetch('http://localhost:3001/compte/preferences', { headers: { 'Authorization': 'Bearer ' + token } })
+      .then(res => res.json())
+      .then(data => {
+        setEmailRecommandations(data.email_recommandations ?? true)
+        setEmailRelanceSaga(data.email_relance_saga ?? true)
+      })
       .finally(() => setChargement(false))
   }, [router])
 
@@ -63,6 +73,22 @@ export default function Dashboard() {
     } catch {}
     setChargementReco(false)
     setRecoChargees(true)
+  }
+
+  async function sauvegarderPreferences() {
+    const token = localStorage.getItem('clientToken')
+    if (!token) return
+    setSavingPrefs(true)
+    try {
+      await fetch('http://localhost:3001/compte/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ email_recommandations: emailRecommandations, email_relance_saga: emailRelanceSaga }),
+      })
+      setPrefsSaved(true)
+      setTimeout(() => setPrefsSaved(false), 3000)
+    } catch {}
+    setSavingPrefs(false)
   }
 
   async function retirerWishlist(livre_id: number) {
@@ -93,19 +119,17 @@ export default function Dashboard() {
 
   const ce = client?.ce || null
 
-  const onglets = ce
-    ? [
-        { id: 'commandes',    label: 'Mes commandes',     count: commandes.length + reservations.length },
-        { id: 'achats',       label: 'Achats en magasin', count: ventes.length },
-        { id: 'wishlist',     label: 'Wishlist',          count: wishlist.length },
-      ]
-    : [
-        { id: 'commandes',    label: 'Click & Collect',  count: commandes.length },
-        { id: 'reservations', label: 'Réservations',      count: reservations.length },
-        { id: 'achats',       label: 'Achats en magasin', count: ventes.length },
-        { id: 'wishlist',     label: 'Wishlist',          count: wishlist.length },
-      ]
-
+  const onglets = [
+    ...(ce
+      ? [{ id: 'commandes', label: 'Mes commandes', count: commandes.length + reservations.length }]
+      : [
+          { id: 'commandes',    label: 'Click & Collect', count: commandes.length },
+          { id: 'reservations', label: 'Réservations',    count: reservations.length },
+        ]),
+    { id: 'achats',      label: 'Achats en magasin', count: ventes.length },
+    { id: 'wishlist',    label: 'Wishlist',          count: wishlist.length },
+    { id: 'preferences', label: '⚙️ Préférences',   count: 0 },
+  ]
 
   const carteStyle = {
     backgroundColor: 'white', borderRadius: '12px', padding: '24px',
@@ -123,24 +147,21 @@ export default function Dashboard() {
 
   return (
     <div style={{ backgroundColor: C.fond, minHeight: '100vh', fontFamily: FONT }}>
-
-      {/* Header partagé — accès catalogue, accueil, événements */}
       <Header pageCourante="" />
 
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '48px 24px 80px', boxSizing: 'border-box' }}>
 
-        {/* ── En-tête compte ──────────────────────────────────────────── */}
+        {/* En-tête */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '40px', flexWrap: 'wrap', gap: '16px' }}>
           <div>
             <p style={{ color: C.texteSecondaire, fontSize: '13px', letterSpacing: '2px', margin: '0 0 6px', fontFamily: FONT }}>Espace client</p>
-            <h1 style={{ fontSize: '32px', fontWeight: '700', color: C.texte, margin: 0, fontFamily: FONT }}>
-              Bonjour, {client?.prenom}
-            </h1>
+            <h1 style={{ fontSize: '32px', fontWeight: '700', color: C.texte, margin: 0, fontFamily: FONT }}>Bonjour, {client?.prenom}</h1>
             <p style={{ fontSize: '15px', color: C.texteSecondaire, margin: '6px 0 8px', fontFamily: FONT }}>{client?.email}</p>
-            <button onClick={() => { localStorage.removeItem('clientToken'); localStorage.removeItem('clientInfo'); window.location.href = '/' }} style={{ backgroundColor: 'transparent', border: `1px solid ${C.texteSecondaire}`, color: C.texteSecondaire, fontSize: '13px', cursor: 'pointer', fontFamily: FONT, padding: '6px 16px', borderRadius: '40px' }}>Déconnexion</button>
+            <button onClick={() => { localStorage.removeItem('clientToken'); localStorage.removeItem('clientInfo'); window.location.href = '/' }}
+              style={{ backgroundColor: 'transparent', border: `1px solid ${C.texteSecondaire}`, color: C.texteSecondaire, fontSize: '13px', cursor: 'pointer', fontFamily: FONT, padding: '6px 16px', borderRadius: '40px' }}>
+              Déconnexion
+            </button>
           </div>
-
-          {/* Badge CE */}
           {ce && (
             <div style={{ backgroundColor: C.vert, borderRadius: '14px', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '16px' }}>
               <span style={{ fontSize: '28px' }}>🏢</span>
@@ -155,34 +176,25 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ── Recommandations IA ──────────────────────────────────────── */}
+        {/* Recommandations IA */}
         <div style={{ backgroundColor: C.vert, borderRadius: '16px', padding: '28px 32px', marginBottom: '40px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: recoChargees && recommandations.length > 0 ? '24px' : '0', flexWrap: 'wrap', gap: '12px' }}>
             <div>
               <p style={{ color: C.or, fontSize: '11px', letterSpacing: '2px', fontWeight: '600', margin: '0 0 4px', fontFamily: FONT }}>INTELLIGENCE ARTIFICIELLE</p>
               <h3 style={{ color: 'white', fontSize: '20px', fontWeight: '700', margin: 0, fontFamily: FONT }}>Nos suggestions pour vous</h3>
             </div>
-            {!recoChargees ? (
-              <button onClick={chargerRecommandations} disabled={chargementReco}
-                style={{ backgroundColor: chargementReco ? 'rgba(255,255,255,0.1)' : C.or, color: chargementReco ? 'rgba(255,255,255,0.5)' : C.vert, border: 'none', borderRadius: '40px', padding: '10px 24px', fontSize: '14px', fontWeight: '700', cursor: chargementReco ? 'not-allowed' : 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' as const }}>
-                {chargementReco ? '✨ Analyse en cours...' : '✨ Obtenir mes recommandations'}
-              </button>
-            ) : (
-              <button onClick={chargerRecommandations} disabled={chargementReco}
-                style={{ backgroundColor: 'transparent', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '40px', padding: '8px 16px', fontSize: '12px', cursor: chargementReco ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
-                {chargementReco ? '...' : '↺ Actualiser'}
-              </button>
-            )}
+            {!recoChargees
+              ? <button onClick={chargerRecommandations} disabled={chargementReco}
+                  style={{ backgroundColor: chargementReco ? 'rgba(255,255,255,0.1)' : C.or, color: chargementReco ? 'rgba(255,255,255,0.5)' : C.vert, border: 'none', borderRadius: '40px', padding: '10px 24px', fontSize: '14px', fontWeight: '700', cursor: chargementReco ? 'not-allowed' : 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' as const }}>
+                  {chargementReco ? '✨ Analyse en cours...' : '✨ Obtenir mes recommandations'}
+                </button>
+              : <button onClick={chargerRecommandations} disabled={chargementReco}
+                  style={{ backgroundColor: 'transparent', color: 'rgba(255,255,255,0.5)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '40px', padding: '8px 16px', fontSize: '12px', cursor: chargementReco ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
+                  {chargementReco ? '...' : '↺ Actualiser'}
+                </button>}
           </div>
-
-          {chargementReco && !recoChargees && (
-            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', margin: '16px 0 0', fontFamily: FONT }}>
-              Notre libraire IA analyse vos lectures...
-            </p>
-          )}
-          {recoChargees && recommandations.length === 0 && (
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', marginTop: '16px', fontFamily: FONT }}>Aucune recommandation disponible pour le moment.</p>
-          )}
+          {chargementReco && !recoChargees && <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '13px', margin: '16px 0 0', fontFamily: FONT }}>Notre libraire IA analyse vos lectures...</p>}
+          {recoChargees && recommandations.length === 0 && <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', marginTop: '16px', fontFamily: FONT }}>Aucune recommandation disponible pour le moment.</p>}
           {recoChargees && recommandations.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px' }}>
               {recommandations.map((r, i) => (
@@ -204,26 +216,21 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ── Onglets ─────────────────────────────────────────────────── */}
+        {/* Onglets */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '32px', flexWrap: 'wrap' }}>
           {onglets.map(o => (
             <button key={o.id} onClick={() => setOnglet(o.id as typeof onglet)}
               style={{ padding: '10px 22px', borderRadius: '40px', border: 'none', cursor: 'pointer', fontSize: '15px', fontFamily: FONT, fontWeight: onglet === o.id ? '700' : '400', backgroundColor: onglet === o.id ? C.vert : 'white', color: onglet === o.id ? 'white' : C.texteSecondaire, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', transition: 'all 0.15s' }}>
               {o.label}
-              {o.count > 0 && (
-                <span style={{ marginLeft: '8px', backgroundColor: onglet === o.id ? 'rgba(255,255,255,0.25)' : C.fondAlt, color: onglet === o.id ? 'white' : C.vert, padding: '2px 8px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
-                  {o.count}
-                </span>
-              )}
+              {o.count > 0 && <span style={{ marginLeft: '8px', backgroundColor: onglet === o.id ? 'rgba(255,255,255,0.25)' : C.fondAlt, color: onglet === o.id ? 'white' : C.vert, padding: '2px 8px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>{o.count}</span>}
             </button>
           ))}
         </div>
 
-        {/* ── Commandes (fusionnées pour CE, séparées sinon) ─────────── */}
+        {/* Click & Collect (sans CE) */}
         {onglet === 'commandes' && !ce && (
           <div>
-            {commandes.length === 0
-              ? <EmptyState emoji="📦" texte="Aucune commande Click & Collect" />
+            {commandes.length === 0 ? <EmptyState emoji="📦" texte="Aucune commande Click & Collect" />
               : <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {commandes.map(c => (
                     <div key={c.id} style={carteStyle}>
@@ -242,11 +249,10 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Réservations (clients sans CE seulement) ────────────────── */}
+        {/* Réservations (sans CE) */}
         {onglet === 'reservations' && !ce && (
           <div>
-            {reservations.length === 0
-              ? <EmptyState emoji="📚" texte="Aucune réservation" />
+            {reservations.length === 0 ? <EmptyState emoji="📚" texte="Aucune réservation" />
               : <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {reservations.map(r => (
                     <div key={r.id} style={carteStyle}>
@@ -265,13 +271,11 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Mes commandes (clients CE — fusionné) ───────────────────── */}
+        {/* Mes commandes (CE — fusionné) */}
         {onglet === 'commandes' && ce && (
           <div>
-            {commandes.length === 0 && reservations.length === 0
-              ? <EmptyState emoji="📦" texte="Aucune commande pour le moment" />
+            {commandes.length === 0 && reservations.length === 0 ? <EmptyState emoji="📦" texte="Aucune commande pour le moment" />
               : <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {/* Réservations */}
                   {reservations.map(r => (
                     <div key={'r-' + r.id} style={carteStyle}>
                       <div>
@@ -288,7 +292,6 @@ export default function Dashboard() {
                       </div>
                     </div>
                   ))}
-                  {/* Click & Collect */}
                   {commandes.map(c => (
                     <div key={'c-' + c.id} style={carteStyle}>
                       <div>
@@ -309,11 +312,10 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Achats en magasin ───────────────────────────────────────── */}
+        {/* Achats en magasin */}
         {onglet === 'achats' && (
           <div>
-            {ventes.length === 0
-              ? <EmptyState emoji="🛍️" texte="Aucun achat en magasin enregistré" />
+            {ventes.length === 0 ? <EmptyState emoji="🛍️" texte="Aucun achat en magasin enregistré" />
               : <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {ventes.map(v => (
                     <div key={v.id} style={carteStyle}>
@@ -332,11 +334,10 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ── Wishlist ────────────────────────────────────────────────── */}
+        {/* Wishlist */}
         {onglet === 'wishlist' && (
           <div>
-            {wishlist.length === 0
-              ? <EmptyState emoji="♡" texte="Votre wishlist est vide" />
+            {wishlist.length === 0 ? <EmptyState emoji="♡" texte="Votre wishlist est vide" />
               : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '20px' }}>
                   {wishlist.map(w => (
                     <div key={w.id} style={{ backgroundColor: 'white', borderRadius: '12px', padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', borderTop: `4px solid ${C.or}` }}>
@@ -351,14 +352,55 @@ export default function Dashboard() {
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: '8px' }}>
-                        <a href={`/livres/${w.livre_id}`} style={{ flex: 1, textAlign: 'center', padding: '10px', backgroundColor: C.vert, color: 'white', borderRadius: '40px', textDecoration: 'none', fontSize: '14px', fontWeight: '700', fontFamily: FONT }}>
-                          Voir le livre
-                        </a>
+                        <a href={`/livres/${w.livre_id}`} style={{ flex: 1, textAlign: 'center', padding: '10px', backgroundColor: C.vert, color: 'white', borderRadius: '40px', textDecoration: 'none', fontSize: '14px', fontWeight: '700', fontFamily: FONT }}>Voir le livre</a>
                         <button onClick={() => retirerWishlist(w.livre_id)} style={{ padding: '10px 14px', backgroundColor: '#fff0f0', color: '#c0392b', border: 'none', borderRadius: '40px', fontSize: '14px', cursor: 'pointer', fontFamily: FONT }}>✕</button>
                       </div>
                     </div>
                   ))}
                 </div>}
+          </div>
+        )}
+
+        {/* Préférences */}
+        {onglet === 'preferences' && (
+          <div style={{ maxWidth: '600px' }}>
+            <h2 style={{ fontSize: '22px', fontWeight: '700', color: C.texte, margin: '0 0 8px', fontFamily: FONT }}>Mes préférences emails</h2>
+            <p style={{ fontSize: '14px', color: C.texteSecondaire, margin: '0 0 32px', fontFamily: FONT }}>
+              Gérez les emails que Bookdog vous envoie. Vous pouvez modifier ces préférences à tout moment.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
+
+              {/* Toggle recommandations mensuelles */}
+              <div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '16px', fontWeight: '700', color: C.texte, margin: '0 0 4px', fontFamily: FONT }}>📚 Recommandations du mois</p>
+                  <p style={{ fontSize: '13px', color: C.texteSecondaire, margin: 0, fontFamily: FONT, lineHeight: '1.6' }}>
+                    Une sélection personnalisée de 3 livres basée sur vos lectures, envoyée le 1er de chaque mois.
+                  </p>
+                </div>
+                <Toggle active={emailRecommandations} onChange={setEmailRecommandations} />
+              </div>
+
+              {/* Toggle relance saga */}
+              <div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: '16px', fontWeight: '700', color: C.texte, margin: '0 0 4px', fontFamily: FONT }}>📖 Rappels suite de série</p>
+                  <p style={{ fontSize: '13px', color: C.texteSecondaire, margin: 0, fontFamily: FONT, lineHeight: '1.6' }}>
+                    Quand vous achetez un tome, on vous rappelle la suite quelques semaines plus tard — le temps de le lire.
+                  </p>
+                </div>
+                <Toggle active={emailRelanceSaga} onChange={setEmailRelanceSaga} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <button onClick={sauvegarderPreferences} disabled={savingPrefs}
+                style={{ padding: '12px 32px', backgroundColor: savingPrefs ? '#aaa' : C.vert, color: 'white', border: 'none', borderRadius: '40px', fontSize: '15px', fontWeight: '700', cursor: savingPrefs ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
+                {savingPrefs ? 'Enregistrement...' : 'Enregistrer mes préférences'}
+              </button>
+              {prefsSaved && <span style={{ color: C.vert, fontSize: '14px', fontWeight: '600', fontFamily: FONT }}>✓ Sauvegardé</span>}
+            </div>
           </div>
         )}
       </main>
@@ -367,6 +409,15 @@ export default function Dashboard() {
         <p style={{ color: C.fondAlt, fontSize: '14px', margin: 0, fontFamily: FONT }}>2026 Bookdog — Librairie indépendante Paris 17e</p>
       </footer>
     </div>
+  )
+}
+
+function Toggle({ active, onChange }: { active: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button onClick={() => onChange(!active)}
+      style={{ width: '52px', height: '28px', borderRadius: '14px', border: 'none', cursor: 'pointer', backgroundColor: active ? '#1A3C2E' : '#ddd', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
+      <span style={{ position: 'absolute', top: '3px', left: active ? '27px' : '3px', width: '22px', height: '22px', borderRadius: '50%', backgroundColor: 'white', transition: 'left 0.2s', boxShadow: '0 1px 4px rgba(0,0,0,0.2)', display: 'block' }} />
+    </button>
   )
 }
 
