@@ -17,6 +17,8 @@ type Livre = { id: number; titre: string; auteur: string; isbn: string; prix: nu
 type Selection = { id: number; livre_id: number; type: string; label: string | null; rang: number | null; genre: string | null; actif: boolean; titre: string; auteur: string; isbn: string; prix: number; stock: number }
 type Evenement = { id: number; titre: string; description: string | null; date_evenement: string; categorie: string | null; affiche_url: string | null; actif: boolean }
 type CE = { id: number; nom: string; code: string; remise: number; adresse_livraison: string | null; contact_nom: string | null; contact_email: string | null; actif: boolean; date_creation: string; domaines: string[] }
+type CrmTache = { id: number; type: 'relance_saga' | 'recommandation'; email: string; client_id: number; livre_id: number | null; livre_suivant_id: number | null; data: any; date_envoi: string; envoye: boolean; date_envoi_effectif: string | null; date_creation: string; titre_livre?: string; titre_suivant?: string; nom_client?: string }
+type CrmStats = { total: number; en_attente: number; envoyes: number; relances_saga: number; recommandations: number; clients_opt_in_recommandations: number; clients_opt_in_relance: number }
 
 type RapportImport = { message: string; total?: number; crees?: number; mis_a_jour?: number; ajoutes?: number; deja_presents?: number; ignores?: number; erreurs?: string[]; isbn_introuvable?: string[]; scrapes?: number; associes?: number; non_trouves_en_base?: number; non_trouves?: { rang: number; titre: string; auteur: string }[] }
 type AperçuCatalogue = { colonnes_brutes: string[]; colonnes_mappees: Record<string, string | null>; apercu: Record<string, string>[]; total_estime: number; separateur: string }
@@ -75,10 +77,20 @@ export default function Dashboard() {
   const [ceContactNom, setCeContactNom] = useState(''); const [ceContactEmail, setCeContactEmail] = useState('')
   const [ceActif, setCeActif] = useState(true)
   const [ceErreur, setCeErreur] = useState('')
-  // Domaines
   const [ceExpandId, setCeExpandId] = useState<number | null>(null)
   const [nouveauDomaine, setNouveauDomaine] = useState('')
   const [erreurDomaine, setErreurDomaine] = useState('')
+
+  // CRM
+  const [crmTaches, setCrmTaches] = useState<CrmTache[]>([])
+  const [crmStats, setCrmStats] = useState<CrmStats | null>(null)
+  const [crmFiltreType, setCrmFiltreType] = useState<string>('tous')
+  const [crmFiltreEnvoye, setCrmFiltreEnvoye] = useState<string>('en_attente')
+  const [crmEnvoyerEnCours, setCrmEnvoyerEnCours] = useState(false)
+  const [crmPlanifierEnCours, setCrmPlanifierEnCours] = useState(false)
+  const [crmMessage, setCrmMessage] = useState<{ type: 'succes' | 'erreur'; texte: string } | null>(null)
+  const [crmTacheModifId, setCrmTacheModifId] = useState<number | null>(null)
+  const [crmNouvelleDate, setCrmNouvelleDate] = useState('')
 
   const token = () => localStorage.getItem('token')
   const headers = () => ({ 'Authorization': 'Bearer ' + token() })
@@ -100,11 +112,26 @@ export default function Dashboard() {
   const chargerCEs = () => {
     fetch('http://localhost:3001/ce', { headers: headers() }).then(r => r.json()).then(d => setCes(Array.isArray(d) ? d : [])).catch(() => {})
   }
+  const chargerCRM = () => {
+    const params = new URLSearchParams()
+    if (crmFiltreType !== 'tous') params.set('type', crmFiltreType)
+    if (crmFiltreEnvoye === 'en_attente') params.set('envoye', 'false')
+    else if (crmFiltreEnvoye === 'envoyes') params.set('envoye', 'true')
+    params.set('limit', '50')
+    fetch(`http://localhost:3001/crm/taches?${params}`, { headers: headers() })
+      .then(r => r.json()).then(d => setCrmTaches(Array.isArray(d) ? d : [])).catch(() => {})
+    fetch('http://localhost:3001/crm/stats', { headers: headers() })
+      .then(r => r.json()).then(d => setCrmStats(d)).catch(() => {})
+  }
 
   useEffect(() => {
     if (!token()) { window.location.href = '/admin'; return }
     chargerDonnees(); chargerSelections(); chargerEvenements(); chargerCEs()
   }, [])
+
+  useEffect(() => {
+    if (onglet === 'crm') chargerCRM()
+  }, [onglet, crmFiltreType, crmFiltreEnvoye])
 
   // ── Réservations / Commandes ──────────────────────────────────────────────
   const changerStatutReservation = async (id: number, statut: string) => {
@@ -218,59 +245,84 @@ export default function Dashboard() {
     }
     setCeErreur(''); setFormulaireCE(true)
   }
-
   const sauvegarderCE = async () => {
     setCeErreur('')
     if (!ceNom || !ceCode) { setCeErreur('Nom et code requis'); return }
     try {
       if (ceEdite) {
-        const res = await fetch(`http://localhost:3001/ce/${ceEdite.id}`, {
-          method: 'PUT', headers: headersJson(),
-          body: JSON.stringify({ nom: ceNom, remise: parseFloat(ceRemise)||5, adresse_livraison: ceAdresse||null, contact_nom: ceContactNom||null, contact_email: ceContactEmail||null, actif: ceActif })
-        })
+        const res = await fetch(`http://localhost:3001/ce/${ceEdite.id}`, { method: 'PUT', headers: headersJson(), body: JSON.stringify({ nom: ceNom, remise: parseFloat(ceRemise)||5, adresse_livraison: ceAdresse||null, contact_nom: ceContactNom||null, contact_email: ceContactEmail||null, actif: ceActif }) })
         if (!res.ok) { const d = await res.json(); setCeErreur(d.message); return }
       } else {
-        const res = await fetch('http://localhost:3001/ce', {
-          method: 'POST', headers: headersJson(),
-          body: JSON.stringify({ nom: ceNom, code: ceCode.toLowerCase().trim(), remise: parseFloat(ceRemise)||5, adresse_livraison: ceAdresse||null, contact_nom: ceContactNom||null, contact_email: ceContactEmail||null })
-        })
+        const res = await fetch('http://localhost:3001/ce', { method: 'POST', headers: headersJson(), body: JSON.stringify({ nom: ceNom, code: ceCode.toLowerCase().trim(), remise: parseFloat(ceRemise)||5, adresse_livraison: ceAdresse||null, contact_nom: ceContactNom||null, contact_email: ceContactEmail||null }) })
         if (!res.ok) { const d = await res.json(); setCeErreur(d.message); return }
       }
       setFormulaireCE(false); chargerCEs()
     } catch { setCeErreur('Impossible de contacter le serveur') }
   }
-
   const supprimerCE = async (id: number) => {
     if (!confirm('Supprimer ce CE ? Les comptes clients liés perdront leur remise.')) return
     await fetch(`http://localhost:3001/ce/${id}`, { method: 'DELETE', headers: headers() })
     chargerCEs()
   }
-
   const toggleActifCE = async (ce: CE) => {
-    await fetch(`http://localhost:3001/ce/${ce.id}`, {
-      method: 'PUT', headers: headersJson(),
-      body: JSON.stringify({ nom: ce.nom, remise: ce.remise, adresse_livraison: ce.adresse_livraison, contact_nom: ce.contact_nom, contact_email: ce.contact_email, actif: !ce.actif })
-    })
+    await fetch(`http://localhost:3001/ce/${ce.id}`, { method: 'PUT', headers: headersJson(), body: JSON.stringify({ nom: ce.nom, remise: ce.remise, adresse_livraison: ce.adresse_livraison, contact_nom: ce.contact_nom, contact_email: ce.contact_email, actif: !ce.actif }) })
     chargerCEs()
   }
-
   const ajouterDomaine = async (ceId: number) => {
     setErreurDomaine('')
     const dom = nouveauDomaine.toLowerCase().trim()
     if (!dom) { setErreurDomaine('Domaine requis'); return }
     try {
-      const res = await fetch(`http://localhost:3001/ce/${ceId}/domaines`, {
-        method: 'POST', headers: headersJson(), body: JSON.stringify({ domaine: dom })
-      })
+      const res = await fetch(`http://localhost:3001/ce/${ceId}/domaines`, { method: 'POST', headers: headersJson(), body: JSON.stringify({ domaine: dom }) })
       const data = await res.json()
       if (!res.ok) { setErreurDomaine(data.message); return }
       setNouveauDomaine(''); chargerCEs()
     } catch { setErreurDomaine('Erreur serveur') }
   }
-
   const supprimerDomaine = async (domaineId: number) => {
     await fetch(`http://localhost:3001/ce/domaines/${domaineId}`, { method: 'DELETE', headers: headers() })
     chargerCEs()
+  }
+
+  // ── CRM ───────────────────────────────────────────────────────────────────
+  const envoyerTachesDuJour = async () => {
+    setCrmEnvoyerEnCours(true); setCrmMessage(null)
+    try {
+      const res = await fetch('http://localhost:3001/crm/taches/envoyer', { method: 'POST', headers: headersJson() })
+      const data = await res.json()
+      if (!res.ok) { setCrmMessage({ type: 'erreur', texte: data.message || 'Erreur lors de l\'envoi' }); return }
+      setCrmMessage({ type: 'succes', texte: `✓ ${data.envoyes} email(s) envoyé(s), ${data.ignores} ignoré(s), ${data.erreurs} erreur(s)` })
+      chargerCRM()
+    } catch { setCrmMessage({ type: 'erreur', texte: 'Impossible de contacter le serveur' }) }
+    finally { setCrmEnvoyerEnCours(false) }
+  }
+
+  const planifierRecommandations = async () => {
+    if (!confirm('Créer les tâches de recommandations mensuelles pour tous les clients opt-in ? Les tâches existantes non envoyées seront remplacées.')) return
+    setCrmPlanifierEnCours(true); setCrmMessage(null)
+    try {
+      const res = await fetch('http://localhost:3001/crm/recommandations/planifier', { method: 'POST', headers: headersJson() })
+      const data = await res.json()
+      if (!res.ok) { setCrmMessage({ type: 'erreur', texte: data.message || 'Erreur lors de la planification' }); return }
+      setCrmMessage({ type: 'succes', texte: `✓ ${data.taches_creees || 0} tâche(s) de recommandation créée(s)` })
+      chargerCRM()
+    } catch { setCrmMessage({ type: 'erreur', texte: 'Impossible de contacter le serveur' }) }
+    finally { setCrmPlanifierEnCours(false) }
+  }
+
+  const modifierDateTache = async (id: number) => {
+    if (!crmNouvelleDate) return
+    try {
+      const res = await fetch(`http://localhost:3001/crm/taches/${id}`, { method: 'PUT', headers: headersJson(), body: JSON.stringify({ date_envoi: crmNouvelleDate }) })
+      if (!res.ok) return
+      setCrmTacheModifId(null); setCrmNouvelleDate(''); chargerCRM()
+    } catch {}
+  }
+
+  const supprimerTache = async (id: number) => {
+    if (!confirm('Supprimer cette tâche CRM ?')) return
+    await fetch(`http://localhost:3001/crm/taches/${id}`, { method: 'DELETE', headers: headers() })
+    chargerCRM()
   }
 
   // ── Import ────────────────────────────────────────────────────────────────
@@ -341,6 +393,23 @@ export default function Dashboard() {
   function formatDateEv(dateStr: string) {
     return new Date(dateStr).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
+  function formatDateCrm(dateStr: string) {
+    const d = new Date(dateStr)
+    const now = new Date()
+    const diff = d.getTime() - now.getTime()
+    const jours = Math.round(diff / (1000 * 60 * 60 * 24))
+    const dateStr2 = d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })
+    if (jours < 0) return { texte: dateStr2, couleur: '#c62828', badge: 'En retard' }
+    if (jours === 0) return { texte: dateStr2, couleur: C.orIntense, badge: "Aujourd'hui" }
+    if (jours === 1) return { texte: dateStr2, couleur: C.orIntense, badge: 'Demain' }
+    if (jours <= 7) return { texte: dateStr2, couleur: C.vert, badge: `Dans ${jours}j` }
+    return { texte: dateStr2, couleur: C.texteSecondaire, badge: null }
+  }
+
+  const crmTachesDuJour = crmTaches.filter(t => {
+    const d = new Date(t.date_envoi); const now = new Date()
+    return !t.envoye && d.toDateString() === now.toDateString()
+  }).length
 
   return (
     <div style={{ backgroundColor: C.fond, minHeight: '100vh', fontFamily: FONT }}>
@@ -365,9 +434,10 @@ export default function Dashboard() {
             { id: 'selections', label: 'Sélections' },
             { id: 'evenements', label: 'Événements' },
             { id: 'ce', label: '🏢 CE' },
+            { id: 'crm', label: '📬 CRM' },
             { id: 'import', label: 'Import' },
           ].map(o => (
-            <button key={o.id} onClick={() => { setOnglet(o.id); if (o.id === 'import') { setRapportImport(null); setErreurImport(null) } }} style={styleOnglet(o.id)}>{o.label}</button>
+            <button key={o.id} onClick={() => { setOnglet(o.id); if (o.id === 'import') { setRapportImport(null); setErreurImport(null) } if (o.id === 'crm') setCrmMessage(null) }} style={styleOnglet(o.id)}>{o.label}</button>
           ))}
         </div>
 
@@ -576,8 +646,6 @@ export default function Dashboard() {
               </div>
               <button onClick={() => ouvrirFormulaireCE(null)} style={{ backgroundColor: C.vert, color: 'white', border: 'none', borderRadius: '8px', padding: '10px 20px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', fontFamily: FONT }}>+ Nouveau CE</button>
             </div>
-
-            {/* Formulaire CE */}
             {formulaireCE && (
               <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '28px', marginBottom: '24px', boxShadow: '0 2px 10px rgba(0,0,0,0.07)', borderTop: '4px solid ' + C.vert }}>
                 <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '20px', color: C.texte }}>{ceEdite ? 'Modifier le CE' : 'Nouveau partenaire CE'}</h3>
@@ -603,8 +671,6 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-
-            {/* Liste CE */}
             {ces.length === 0 && !formulaireCE ? (
               <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '60px', textAlign: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
                 <p style={{ fontSize: '40px', marginBottom: '16px' }}>🏢</p>
@@ -615,50 +681,26 @@ export default function Dashboard() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {ces.map(ce => (
                   <div key={ce.id} style={{ backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', overflow: 'hidden', borderLeft: `4px solid ${ce.actif ? C.vert : '#ddd'}` }}>
-                    {/* Header CE */}
                     <div style={{ padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
                           <h3 style={{ fontSize: '16px', fontWeight: '700', color: C.texte, margin: 0 }}>{ce.nom}</h3>
-                          <span style={{ backgroundColor: C.fondAlt, color: C.vert, fontSize: '12px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px' }}>
-                            -{ce.remise}%
-                          </span>
-                          <span style={{ backgroundColor: ce.actif ? '#e8f5e9' : '#f5f5f5', color: ce.actif ? '#2e7d32' : '#bbb', fontSize: '11px', fontWeight: '700', padding: '3px 10px', borderRadius: '20px' }}>
-                            {ce.actif ? '✓ Actif' : '○ Inactif'}
-                          </span>
+                          <span style={{ backgroundColor: C.fondAlt, color: C.vert, fontSize: '12px', fontWeight: '600', padding: '3px 10px', borderRadius: '20px' }}>-{ce.remise}%</span>
+                          <span style={{ backgroundColor: ce.actif ? '#e8f5e9' : '#f5f5f5', color: ce.actif ? '#2e7d32' : '#bbb', fontSize: '11px', fontWeight: '700', padding: '3px 10px', borderRadius: '20px' }}>{ce.actif ? '✓ Actif' : '○ Inactif'}</span>
                         </div>
                         <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                          <div>
-                            <p style={{ fontSize: '11px', color: C.texteSecondaire, letterSpacing: '1px', margin: '0 0 2px', fontWeight: '600' }}>URL D'ACCÈS</p>
-                            <code style={{ fontSize: '12px', color: C.vert, backgroundColor: C.fondAlt, padding: '2px 8px', borderRadius: '4px' }}>bookdog.fr/ce/{ce.code}</code>
-                          </div>
-                          {ce.adresse_livraison && (
-                            <div>
-                              <p style={{ fontSize: '11px', color: C.texteSecondaire, letterSpacing: '1px', margin: '0 0 2px', fontWeight: '600' }}>LIVRAISON</p>
-                              <p style={{ fontSize: '13px', color: C.texte, margin: 0 }}>{ce.adresse_livraison}</p>
-                            </div>
-                          )}
-                          {ce.contact_nom && (
-                            <div>
-                              <p style={{ fontSize: '11px', color: C.texteSecondaire, letterSpacing: '1px', margin: '0 0 2px', fontWeight: '600' }}>CONTACT CE</p>
-                              <p style={{ fontSize: '13px', color: C.texte, margin: 0 }}>{ce.contact_nom} {ce.contact_email && <span style={{ color: C.texteSecondaire }}>— {ce.contact_email}</span>}</p>
-                            </div>
-                          )}
+                          <div><p style={{ fontSize: '11px', color: C.texteSecondaire, letterSpacing: '1px', margin: '0 0 2px', fontWeight: '600' }}>URL D'ACCÈS</p><code style={{ fontSize: '12px', color: C.vert, backgroundColor: C.fondAlt, padding: '2px 8px', borderRadius: '4px' }}>bookdog.fr/ce/{ce.code}</code></div>
+                          {ce.adresse_livraison && <div><p style={{ fontSize: '11px', color: C.texteSecondaire, letterSpacing: '1px', margin: '0 0 2px', fontWeight: '600' }}>LIVRAISON</p><p style={{ fontSize: '13px', color: C.texte, margin: 0 }}>{ce.adresse_livraison}</p></div>}
+                          {ce.contact_nom && <div><p style={{ fontSize: '11px', color: C.texteSecondaire, letterSpacing: '1px', margin: '0 0 2px', fontWeight: '600' }}>CONTACT CE</p><p style={{ fontSize: '13px', color: C.texte, margin: 0 }}>{ce.contact_nom} {ce.contact_email && <span style={{ color: C.texteSecondaire }}>— {ce.contact_email}</span>}</p></div>}
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '8px', flexShrink: 0, marginLeft: '16px' }}>
-                        <button onClick={() => setCeExpandId(ceExpandId === ce.id ? null : ce.id)} style={{ backgroundColor: '#f0f0f0', color: C.texte, border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: FONT }}>
-                          {ceExpandId === ce.id ? '▲ Domaines' : '▼ Domaines'} ({ce.domaines?.length || 0})
-                        </button>
+                        <button onClick={() => setCeExpandId(ceExpandId === ce.id ? null : ce.id)} style={{ backgroundColor: '#f0f0f0', color: C.texte, border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: FONT }}>{ceExpandId === ce.id ? '▲ Domaines' : '▼ Domaines'} ({ce.domaines?.length || 0})</button>
                         <button onClick={() => ouvrirFormulaireCE(ce)} style={{ backgroundColor: '#f0f0f0', color: C.texte, border: 'none', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Modifier</button>
-                        <button onClick={() => toggleActifCE(ce)} style={{ backgroundColor: 'transparent', color: ce.actif ? C.orIntense : C.vert, border: `1px solid ${ce.actif ? C.orIntense : C.vert}`, borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
-                          {ce.actif ? 'Désactiver' : 'Activer'}
-                        </button>
+                        <button onClick={() => toggleActifCE(ce)} style={{ backgroundColor: 'transparent', color: ce.actif ? C.orIntense : C.vert, border: `1px solid ${ce.actif ? C.orIntense : C.vert}`, borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>{ce.actif ? 'Désactiver' : 'Activer'}</button>
                         <button onClick={() => supprimerCE(ce.id)} style={{ backgroundColor: 'transparent', color: '#c62828', border: '1px solid #c62828', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Supprimer</button>
                       </div>
                     </div>
-
-                    {/* Panel domaines */}
                     {ceExpandId === ce.id && (
                       <div style={{ borderTop: '1px solid #f0f0f0', padding: '20px 24px', backgroundColor: '#fafafa' }}>
                         <p style={{ fontSize: '12px', color: C.texteSecondaire, letterSpacing: '1px', fontWeight: '600', margin: '0 0 12px' }}>DOMAINES EMAIL AUTORISÉS</p>
@@ -666,10 +708,7 @@ export default function Dashboard() {
                           {ce.domaines && ce.domaines.length > 0 ? ce.domaines.map((dom, i) => (
                             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: C.fondAlt, borderRadius: '20px', padding: '5px 12px' }}>
                               <span style={{ fontSize: '13px', color: C.vert, fontWeight: '600' }}>@{dom}</span>
-                              <button
-                                onClick={() => supprimerDomaine(i)}
-                                style={{ background: 'none', border: 'none', color: C.texteSecondaire, cursor: 'pointer', fontSize: '14px', padding: '0', lineHeight: 1, display: 'flex', alignItems: 'center' }}
-                              >✕</button>
+                              <button onClick={() => supprimerDomaine(i)} style={{ background: 'none', border: 'none', color: C.texteSecondaire, cursor: 'pointer', fontSize: '14px', padding: '0', lineHeight: 1, display: 'flex', alignItems: 'center' }}>✕</button>
                             </div>
                           )) : <p style={{ fontSize: '13px', color: '#bbb', margin: 0 }}>Aucun domaine configuré</p>}
                         </div>
@@ -677,25 +716,155 @@ export default function Dashboard() {
                           <div style={{ flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'white' }}>
                               <span style={{ padding: '10px 12px', color: C.texteSecondaire, fontSize: '14px', backgroundColor: '#f5f5f5', borderRight: '1px solid #ddd' }}>@</span>
-                              <input
-                                type="text"
-                                value={nouveauDomaine}
-                                onChange={e => { setNouveauDomaine(e.target.value); setErreurDomaine('') }}
-                                placeholder="sanofi.com"
-                                onKeyDown={e => e.key === 'Enter' && ajouterDomaine(ce.id)}
-                                style={{ flex: 1, padding: '10px 14px', border: 'none', fontSize: '14px', fontFamily: FONT, outline: 'none' }}
-                              />
+                              <input type="text" value={nouveauDomaine} onChange={e => { setNouveauDomaine(e.target.value); setErreurDomaine('') }} placeholder="sanofi.com" onKeyDown={e => e.key === 'Enter' && ajouterDomaine(ce.id)} style={{ flex: 1, padding: '10px 14px', border: 'none', fontSize: '14px', fontFamily: FONT, outline: 'none' }} />
                             </div>
                             {erreurDomaine && <p style={{ color: '#c0392b', fontSize: '12px', margin: '4px 0 0' }}>{erreurDomaine}</p>}
                           </div>
-                          <button onClick={() => ajouterDomaine(ce.id)} style={{ padding: '10px 20px', backgroundColor: C.vert, color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                            + Ajouter
-                          </button>
+                          <button onClick={() => ajouterDomaine(ce.id)} style={{ padding: '10px 20px', backgroundColor: C.vert, color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>+ Ajouter</button>
                         </div>
                       </div>
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ── CRM ───────────────────────────────────────────────────────── */}
+        {onglet === 'crm' && (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
+              <div>
+                <h2 style={{ fontSize: '20px', fontWeight: '600', color: C.texte, margin: '0 0 4px' }}>CRM — Emails automatiques</h2>
+                <p style={{ fontSize: '13px', color: C.texteSecondaire, margin: 0 }}>Relances saga et recommandations mensuelles planifiées.</p>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={planifierRecommandations} disabled={crmPlanifierEnCours} style={{ backgroundColor: crmPlanifierEnCours ? '#ddd' : C.orIntense, color: 'white', border: 'none', borderRadius: '8px', padding: '10px 18px', fontSize: '13px', fontWeight: '600', cursor: crmPlanifierEnCours ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
+                  {crmPlanifierEnCours ? '⏳ Planification...' : '🗓 Planifier recos du mois'}
+                </button>
+                <button onClick={envoyerTachesDuJour} disabled={crmEnvoyerEnCours} style={{ backgroundColor: crmEnvoyerEnCours ? '#ddd' : C.vert, color: 'white', border: 'none', borderRadius: '8px', padding: '10px 18px', fontSize: '13px', fontWeight: '600', cursor: crmEnvoyerEnCours ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
+                  {crmEnvoyerEnCours ? '⏳ Envoi...' : `📬 Envoyer (${crmTachesDuJour} aujourd'hui)`}
+                </button>
+              </div>
+            </div>
+
+            {/* Message retour */}
+            {crmMessage && (
+              <div style={{ backgroundColor: crmMessage.type === 'succes' ? C.fondAlt : '#fff0f0', border: `1px solid ${crmMessage.type === 'succes' ? C.vert : '#ffcccc'}`, borderRadius: '10px', padding: '14px 20px', marginBottom: '24px', fontSize: '14px', color: crmMessage.type === 'succes' ? C.vert : '#c62828' }}>
+                {crmMessage.texte}
+              </div>
+            )}
+
+            {/* Stats */}
+            {crmStats && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '12px', marginBottom: '28px' }}>
+                {[
+                  { label: 'EN ATTENTE', valeur: crmStats.en_attente, couleur: C.orIntense },
+                  { label: 'ENVOYÉS', valeur: crmStats.envoyes, couleur: C.vert },
+                  { label: 'RELANCES SAGA', valeur: crmStats.relances_saga, couleur: C.texte },
+                  { label: 'RECOS', valeur: crmStats.recommandations, couleur: C.texte },
+                  { label: 'CLIENTS OPT-IN', valeur: crmStats.clients_opt_in_recommandations, couleur: C.texte },
+                ].map(s => (
+                  <div key={s.label} style={{ backgroundColor: 'white', borderRadius: '10px', padding: '16px 20px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
+                    <p style={{ fontSize: '11px', color: C.texteSecondaire, letterSpacing: '1px', fontWeight: '600', margin: '0 0 6px' }}>{s.label}</p>
+                    <p style={{ fontSize: '24px', fontWeight: '700', color: s.couleur, margin: 0 }}>{s.valeur}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Filtres */}
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: '6px', backgroundColor: '#ede9e3', borderRadius: '8px', padding: '4px' }}>
+                {[{ id: 'tous', label: 'Tous types' }, { id: 'relance_saga', label: '📖 Saga' }, { id: 'recommandation', label: '⭐ Recos' }].map(f => (
+                  <button key={f.id} onClick={() => setCrmFiltreType(f.id)} style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', fontSize: '13px', fontWeight: '600', cursor: 'pointer', backgroundColor: crmFiltreType === f.id ? C.vert : 'transparent', color: crmFiltreType === f.id ? 'white' : C.texteSecondaire, fontFamily: FONT }}>{f.label}</button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '6px', backgroundColor: '#ede9e3', borderRadius: '8px', padding: '4px' }}>
+                {[{ id: 'en_attente', label: 'En attente' }, { id: 'envoyes', label: 'Envoyés' }, { id: 'tous', label: 'Tous' }].map(f => (
+                  <button key={f.id} onClick={() => setCrmFiltreEnvoye(f.id)} style={{ padding: '6px 14px', borderRadius: '6px', border: 'none', fontSize: '13px', fontWeight: '600', cursor: 'pointer', backgroundColor: crmFiltreEnvoye === f.id ? C.vert : 'transparent', color: crmFiltreEnvoye === f.id ? 'white' : C.texteSecondaire, fontFamily: FONT }}>{f.label}</button>
+                ))}
+              </div>
+              <button onClick={chargerCRM} style={{ padding: '6px 14px', borderRadius: '8px', border: `1px solid #ddd`, backgroundColor: 'white', fontSize: '13px', cursor: 'pointer', color: C.texteSecondaire, fontFamily: FONT }}>↺ Rafraîchir</button>
+            </div>
+
+            {/* Liste tâches */}
+            {crmTaches.length === 0 ? (
+              <div style={{ backgroundColor: 'white', borderRadius: '12px', padding: '60px', textAlign: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+                <p style={{ fontSize: '40px', marginBottom: '16px' }}>📭</p>
+                <p style={{ color: C.texteSecondaire, fontSize: '15px', margin: 0 }}>Aucune tâche CRM dans cette vue</p>
+              </div>
+            ) : (
+              <div style={{ backgroundColor: 'white', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,0.07)' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f5f5f5' }}>
+                      {['Type', 'Client', 'Livre / Contexte', 'Date envoi prévue', 'Statut', 'Actions'].map(h => (
+                        <th key={h} style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', color: C.texteSecondaire, fontWeight: '600', letterSpacing: '0.5px' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {crmTaches.map((t, i) => {
+                      const dateInfo = formatDateCrm(t.date_envoi)
+                      return (
+                        <tr key={t.id} style={{ borderTop: '1px solid #f0f0f0', backgroundColor: i%2===0?'white':'#fafafa' }}>
+                          <td style={{ padding: '12px 16px' }}>
+                            <span style={{ backgroundColor: t.type === 'relance_saga' ? '#e8f0fe' : '#fff8e6', color: t.type === 'relance_saga' ? '#1a56db' : C.orIntense, padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
+                              {t.type === 'relance_saga' ? '📖 Saga' : '⭐ Reco'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            <p style={{ fontSize: '13px', fontWeight: '600', color: C.texte, margin: '0 0 2px' }}>{t.nom_client || '—'}</p>
+                            <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: 0 }}>{t.email}</p>
+                          </td>
+                          <td style={{ padding: '12px 16px', maxWidth: '220px' }}>
+                            {t.type === 'relance_saga' ? (
+                              <div>
+                                <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: '0 0 2px' }}>Lu : <span style={{ color: C.texte, fontStyle: 'italic' }}>{t.titre_livre || '—'}</span></p>
+                                <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: 0 }}>Suite : <span style={{ color: C.vert, fontWeight: '600' }}>{t.titre_suivant || '—'}</span></p>
+                              </div>
+                            ) : (
+                              <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: 0, fontStyle: 'italic' }}>
+                                {t.data?.titres ? t.data.titres.slice(0, 2).join(', ') + (t.data.titres.length > 2 ? '…' : '') : 'Recommandations personnalisées'}
+                              </p>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            {crmTacheModifId === t.id ? (
+                              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                <input type="date" value={crmNouvelleDate} onChange={e => setCrmNouvelleDate(e.target.value)} style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #ddd', fontSize: '12px', fontFamily: FONT }} />
+                                <button onClick={() => modifierDateTache(t.id)} style={{ backgroundColor: C.vert, color: 'white', border: 'none', borderRadius: '6px', padding: '4px 10px', fontSize: '12px', cursor: 'pointer' }}>✓</button>
+                                <button onClick={() => setCrmTacheModifId(null)} style={{ background: 'none', border: 'none', color: C.texteSecondaire, cursor: 'pointer', fontSize: '14px' }}>✕</button>
+                              </div>
+                            ) : (
+                              <div>
+                                <p style={{ fontSize: '13px', color: dateInfo.couleur, fontWeight: '600', margin: '0 0 2px' }}>{dateInfo.texte}</p>
+                                {dateInfo.badge && <span style={{ backgroundColor: dateInfo.couleur === '#c62828' ? '#ffebee' : '#fff8e6', color: dateInfo.couleur, fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '20px' }}>{dateInfo.badge}</span>}
+                              </div>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            {t.envoye ? (
+                              <span style={{ backgroundColor: C.fondAlt, color: C.vert, padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>✓ Envoyé</span>
+                            ) : (
+                              <span style={{ backgroundColor: '#fff8e6', color: C.orIntense, padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>En attente</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 16px' }}>
+                            {!t.envoye && (
+                              <div style={{ display: 'flex', gap: '6px' }}>
+                                <button onClick={() => { setCrmTacheModifId(t.id); const d = new Date(t.date_envoi); setCrmNouvelleDate(d.toISOString().split('T')[0]) }} style={{ backgroundColor: '#f0f0f0', color: C.texte, border: 'none', borderRadius: '6px', padding: '5px 10px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>Reprogrammer</button>
+                                <button onClick={() => supprimerTache(t.id)} style={{ backgroundColor: 'transparent', color: '#c62828', border: '1px solid #c62828', borderRadius: '6px', padding: '5px 10px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>Annuler</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </>
