@@ -14,44 +14,63 @@ const FONT = "'EB Garamond', Georgia, serif"
 // ── Navigation genres (style Mollat) ─────────────────────────────────────────
 const GENRES_NAV = [
   {
-    label: 'Littérature',
-    icone: '📖',
+    label: 'Littérature & Fiction',
     sous: [
       { label: 'Roman', genre: 'Roman' },
-      { label: 'Romance', genre: 'Romance' },
-      { label: 'Poésie', genre: 'Poésie' },
-      { label: 'Bande dessinée', genre: 'Bande dessinée' },
-    ],
-  },
-  {
-    label: 'Sciences humaines',
-    icone: '🏛️',
-    sous: [
-      { label: 'Histoire', genre: 'Histoire' },
-      { label: 'Biographie', genre: 'Biographie' },
-      { label: 'Essai', genre: 'Essai' },
-      { label: 'Philosophie', genre: 'Philosophie' },
-      { label: 'Développement personnel', genre: 'Développement personnel' },
-    ],
-  },
-  {
-    label: 'Imaginaire',
-    icone: '🌌',
-    sous: [
+      { label: 'Roman poche', genre: 'Roman' },
+      { label: 'Policier et Thriller', genre: 'Policier' },
       { label: 'Fantasy', genre: 'Fantasy' },
-      { label: 'Science-fiction', genre: 'Science-fiction' },
-      { label: 'Thriller', genre: 'Thriller' },
-      { label: 'Policier', genre: 'Policier' },
+      { label: 'Science-Fiction', genre: 'Science-fiction' },
+      { label: 'Poésie', genre: 'Poésie' },
+      { label: 'Théâtre', genre: 'Roman' },
+      { label: 'Lettres', genre: 'Roman' },
+    ],
+  },
+  {
+    label: 'Art, Culture et Société',
+    sous: [
+      { label: 'Art', genre: 'Essai' },
+      { label: 'Cinéma', genre: 'Essai' },
+      { label: 'Musique', genre: 'Essai' },
+      { label: 'Histoire', genre: 'Histoire' },
+      { label: 'Politique', genre: 'Essai' },
+      { label: 'Économie', genre: 'Essai' },
+      { label: 'Société', genre: 'Essai' },
+      { label: 'Autobiographie', genre: 'Biographie' },
+      { label: 'Religions, Spiritualités', genre: 'Philosophie' },
     ],
   },
   {
     label: 'Jeunesse',
-    icone: '🌈',
     sous: [
-      { label: 'Albums & Contes', genre: 'Jeunesse' },
-      { label: 'Romans jeunesse', genre: 'Jeunesse' },
+      { label: '0–3 ans', genre: 'Jeunesse' },
+      { label: '3–6 ans', genre: 'Jeunesse' },
+      { label: '9–15 ans', genre: 'Jeunesse' },
+      { label: '15–18 ans', genre: 'Jeunesse' },
     ],
   },
+  {
+    label: 'BD et Manga',
+    sous: [
+      { label: 'BD & Roman Graphique', genre: 'Bande dessinée' },
+      { label: 'Manga', genre: 'Bande dessinée' },
+      { label: 'Comics', genre: 'Bande dessinée' },
+    ],
+  },
+  {
+    label: 'Vie pratique, Loisirs',
+    sous: [
+      { label: 'Cuisine et vins', genre: 'Développement personnel' },
+      { label: 'Santé, Bien-être', genre: 'Développement personnel' },
+      { label: 'Loisirs créatifs, Déco', genre: 'Développement personnel' },
+      { label: 'Nature, animaux, Jardin', genre: 'Essai' },
+      { label: 'Tourisme et voyage', genre: 'Essai' },
+      { label: 'Sports', genre: 'Essai' },
+    ],
+  },
+  { label: 'Scolaire et universitaire', sous: [] },
+  { label: 'Savoirs', sous: [] },
+  { label: 'Ebooks', sous: [] },
 ]
 
 // ── Types wizard ──────────────────────────────────────────────────────────────
@@ -243,12 +262,12 @@ function GenreNav() {
         {GENRES_NAV.map((cat, idx) => (
           <div key={idx} style={{ position: 'relative' }}>
             <button
-              onMouseEnter={() => setActif(idx)}
-              onClick={() => setActif(actif === idx ? null : idx)}
-              style={{ padding: '14px 20px', background: 'none', border: 'none', fontSize: '14px', fontWeight: '700', fontFamily: FONT, cursor: 'pointer', color: actif === idx ? C.vert : C.texte, borderBottom: actif === idx ? `2px solid ${C.vert}` : '2px solid transparent', marginBottom: '-2px', letterSpacing: '0.3px', whiteSpace: 'nowrap' as const, transition: 'color 0.15s' }}>
+              onMouseEnter={() => cat.sous.length > 0 ? setActif(idx) : setActif(null)}
+              onClick={() => cat.sous.length > 0 ? setActif(actif === idx ? null : idx) : window.location.href = '/livres'}
+              style={{ padding: '12px 14px', background: 'none', border: 'none', fontSize: '13px', fontWeight: '600', fontFamily: FONT, cursor: 'pointer', color: actif === idx ? C.vert : C.texte, borderBottom: actif === idx ? `2px solid ${C.vert}` : '2px solid transparent', marginBottom: '-2px', letterSpacing: '0.2px', whiteSpace: 'nowrap' as const, transition: 'color 0.15s' }}>
               {cat.label}
             </button>
-            {actif === idx && (
+            {actif === idx && cat.sous.length > 0 && (
               <div onMouseLeave={() => setActif(null)} style={{ position: 'absolute', top: '100%', left: 0, backgroundColor: 'white', borderRadius: '0 0 12px 12px', boxShadow: '0 8px 32px rgba(0,0,0,0.12)', zIndex: 400, minWidth: '220px', overflow: 'hidden', border: '1px solid #eee', borderTop: 'none' }}>
                 <div style={{ padding: '8px 0' }}>
                   <div style={{ padding: '10px 20px 6px', borderBottom: '1px solid #f5f5f5', marginBottom: '4px' }}>
@@ -256,7 +275,7 @@ function GenreNav() {
                   </div>
                   {cat.sous.map((s, i) => (
                     <a key={i} href={`/livres?genre=${encodeURIComponent(s.genre)}`}
-                      style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 20px', textDecoration: 'none', color: C.texte, fontSize: '14px', fontFamily: FONT }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 20px', textDecoration: 'none', color: C.texte, fontSize: '13px', fontFamily: FONT }}
                       onMouseEnter={e => { e.currentTarget.style.backgroundColor = C.fondAlt; e.currentTarget.style.color = C.vert }}
                       onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'white'; e.currentTarget.style.color = C.texte }}>
                       <span style={{ color: C.or, fontSize: '10px' }}>▶</span> {s.label}
@@ -474,9 +493,6 @@ function BandeauCatalogue({ nbLivres }: { nbLivres: number | null }) {
 
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Home() {
-  const [recherche, setRecherche] = useState('')
-  const [resultats, setResultats] = useState<any[]>([])
-  const [rechercheActive, setRechercheActive] = useState(false)
   const [selections, setSelections] = useState<Selections>({ coups_de_coeur: [], prix: [], top_ventes: [] })
   const [evenements, setEvenements] = useState<Evenement[]>([])
   const [nbLivres, setNbLivres] = useState<number | null>(null)
@@ -491,15 +507,6 @@ export default function Home() {
     fetch('http://localhost:3001/livres').then(r => r.json()).then(d => { if (Array.isArray(d)) setNbLivres(d.length) }).catch(() => {})
     setClientConnecte(!!localStorage.getItem('clientToken'))
   }, [])
-
-  useEffect(() => {
-    if (!recherche.trim()) { setResultats([]); setRechercheActive(false); return }
-    const delai = setTimeout(() => {
-      const q = recherche.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9 ]/g, '')
-      fetch(`http://localhost:3001/livres?titre=${encodeURIComponent(q)}`).then(r => r.json()).then(d => { setResultats(d); setRechercheActive(true) }).catch(() => {})
-    }, 300)
-    return () => clearTimeout(delai)
-  }, [recherche])
 
   async function chargerRecommandations() {
     const token = localStorage.getItem('clientToken')
@@ -519,40 +526,15 @@ export default function Home() {
     <div style={{ backgroundColor: C.fond, minHeight: '100vh', fontFamily: FONT }}>
       <Header pageCourante="accueil" />
 
-      {/* HERO — compact */}
-      <div style={{ backgroundColor: C.vert, padding: '40px 24px 44px' }}>
+      {/* HERO — minimal */}
+      <div style={{ backgroundColor: C.vert, padding: '18px 24px 22px' }}>
         <div style={{ maxWidth: '780px', margin: '0 auto', textAlign: 'center' }}>
-          <p style={{ color: C.or, fontSize: '12px', letterSpacing: '3px', margin: '0 0 10px', fontWeight: '600', fontFamily: FONT }}>Librairie indépendante · Paris 17e</p>
-          <h1 style={{ color: 'white', fontSize: '34px', fontWeight: '700', margin: '0 0 28px', lineHeight: '1.25', fontFamily: FONT }}>Des livres choisis avec passion</h1>
-
-          {/* Barre de recherche */}
-          <div style={{ position: 'relative', maxWidth: '600px', margin: '0 auto' }}>
-            <span style={{ position: 'absolute', left: '20px', top: '50%', transform: 'translateY(-50%)', fontSize: '18px', pointerEvents: 'none' }}>🔍</span>
-            <input type="text" placeholder="Rechercher un livre, un auteur..." value={recherche} onChange={e => setRecherche(e.target.value)}
-              style={{ width: '100%', padding: '16px 20px 16px 52px', borderRadius: '40px', border: 'none', fontSize: '16px', boxSizing: 'border-box', backgroundColor: 'white', boxShadow: '0 4px 24px rgba(0,0,0,0.25)', outline: 'none', fontFamily: FONT }} />
-            {recherche && <button onClick={() => { setRecherche(''); setRechercheActive(false) }} style={{ position: 'absolute', right: '18px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: C.texteSecondaire }}>✕</button>}
-
-            {rechercheActive && (
-              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, backgroundColor: 'white', borderRadius: '14px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', zIndex: 100, overflow: 'hidden', maxHeight: '340px', overflowY: 'auto' }}>
-                {resultats.length === 0
-                  ? <p style={{ padding: '20px', color: C.texteSecondaire, margin: 0, fontSize: '15px', fontFamily: FONT }}>Aucun résultat pour « {recherche} »</p>
-                  : resultats.slice(0, 6).map((l: any) => (
-                    <a key={l.id} href={`/livres/${l.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 22px', borderBottom: '1px solid #f5f5f5', textDecoration: 'none', backgroundColor: 'white' }}
-                      onMouseEnter={e => e.currentTarget.style.backgroundColor = C.fondAlt}
-                      onMouseLeave={e => e.currentTarget.style.backgroundColor = 'white'}>
-                      <div><p style={{ fontSize: '15px', fontWeight: '600', color: C.texte, margin: '0 0 2px', fontFamily: FONT }}>{l.titre}</p><p style={{ fontSize: '13px', color: C.texteSecondaire, margin: 0, fontStyle: 'italic', fontFamily: FONT }}>{l.auteur}</p></div>
-                      <span style={{ fontSize: '15px', fontWeight: '700', color: C.vert, flexShrink: 0, marginLeft: '16px', fontFamily: FONT }}>{l.prix} €</span>
-                    </a>
-                  ))}
-                {resultats.length > 6 && <a href={`/livres?q=${encodeURIComponent(recherche)}`} style={{ display: 'block', padding: '14px 22px', textAlign: 'center', fontSize: '14px', color: C.vert, fontWeight: '600', textDecoration: 'none', backgroundColor: C.fondAlt, fontFamily: FONT }}>Voir tous les résultats ({resultats.length}) →</a>}
-              </div>
-            )}
-          </div>
+          <h1 style={{ color: 'white', fontSize: '28px', fontWeight: '700', margin: 0, lineHeight: '1.2', fontFamily: FONT }}>Des livres choisis avec passion</h1>
         </div>
       </div>
 
       {/* Courbe de transition */}
-      <div style={{ backgroundColor: C.vert, height: '24px', borderRadius: '0 0 50% 50% / 0 0 20px 20px' }} />
+      <div style={{ backgroundColor: C.vert, height: '16px', borderRadius: '0 0 50% 50% / 0 0 14px 14px' }} />
 
       {/* NAVIGATION GENRES */}
       <GenreNav />

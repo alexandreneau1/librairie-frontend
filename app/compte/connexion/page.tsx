@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 const C = {
@@ -22,6 +22,16 @@ export default function Connexion() {
   const [emailReset, setEmailReset] = useState('')
   const [messageReset, setMessageReset] = useState('')
   const [chargementReset, setChargementReset] = useState(false)
+  const [flash, setFlash] = useState('')
+
+  // Récupération d'un éventuel message flash (ex : session expirée) posé par useFetchAuth
+  useEffect(() => {
+    const msg = sessionStorage.getItem('flashMessage')
+    if (msg) {
+      setFlash(msg)
+      sessionStorage.removeItem('flashMessage')
+    }
+  }, [])
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     setForm({ ...form, [e.target.name]: e.target.value })
@@ -105,6 +115,36 @@ export default function Connexion() {
             {modeReset ? 'Mot de passe oublié' : 'Connexion'}
           </h2>
         </div>
+
+        {/* Bandeau flash — affiché si on a été redirigé ici (session expirée, etc.) */}
+        {flash && (
+          <div style={{
+            backgroundColor: '#fff8e6',
+            border: '1px solid #ead9a8',
+            borderRadius: '12px',
+            padding: '14px 18px',
+            marginBottom: '24px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '12px',
+            color: C.orIntense,
+            fontSize: '14px',
+            lineHeight: '1.5',
+            fontFamily: FONT,
+          }}>
+            <span style={{ fontSize: '18px', lineHeight: '1.2', flexShrink: 0 }}>⏱️</span>
+            <span style={{ flex: 1 }}>{flash}</span>
+            <button
+              onClick={() => setFlash('')}
+              aria-label="Fermer"
+              style={{
+                background: 'none', border: 'none', color: C.orIntense,
+                fontSize: '16px', cursor: 'pointer', padding: 0, lineHeight: 1,
+                fontFamily: FONT, flexShrink: 0,
+              }}
+            >✕</button>
+          </div>
+        )}
 
         <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '36px', boxShadow: '0 2px 20px rgba(0,0,0,0.07)' }}>
           {!modeReset ? (

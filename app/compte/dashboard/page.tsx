@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '../../../components/Header'
+import { useFetchAuth } from '../../../lib/fetchAuth'
 
 const C = {
   vert: '#1A3C2E', or: '#D4AF37', orIntense: '#B8960C',
@@ -21,6 +22,8 @@ type ClientInfo = { nom: string; prenom: string; email: string; ce?: CE | null }
 
 export default function Dashboard() {
   const router = useRouter()
+  const { fetchAuth, deconnecter } = useFetchAuth()
+
   const [onglet, setOnglet] = useState<'commandes' | 'reservations' | 'achats' | 'wishlist' | 'preferences'>('commandes')
   const [client, setClient] = useState<ClientInfo | null>(null)
   const [commandes, setCommandes] = useState<Commande[]>([])
@@ -42,49 +45,66 @@ export default function Dashboard() {
     const token = localStorage.getItem('clientToken')
     const info = localStorage.getItem('clientInfo')
     if (!token || !info) { router.push('/compte/connexion'); return }
-    const parsed: ClientInfo = JSON.parse(info)
-    setClient(parsed)
 
-    fetch('http://localhost:3001/compte/historique', { headers: { 'Authorization': 'Bearer ' + token } })
-      .then(res => res.json())
-      .then(data => { setCommandes(data.commandes || []); setReservations(data.reservations || []); setVentes(data.ventes || []) })
+    try {
+      const parsed: ClientInfo = JSON.parse(info)
+      setClient(parsed)
+    } catch {
+      deconnecter()
+      return
+    }
 
-    fetch('http://localhost:3001/compte/wishlist', { headers: { 'Authorization': 'Bearer ' + token } })
-      .then(res => res.json())
-      .then(data => setWishlist(data || []))
+    Promise.all([
+      fetchAuth('http://localhost:3001/compte/historique')
+        .then(res => res ? res.json() : null)
+        .then(data => {
+          if (!data) return
+          setCommandes(Array.isArray(data?.commandes) ? data.commandes : [])
+          setReservations(Array.isArray(data?.reservations) ? data.reservations : [])
+          setVentes(Array.isArray(data?.ventes) ? data.ventes : [])
+        })
+        .catch(() => {}),
 
-    fetch('http://localhost:3001/compte/preferences', { headers: { 'Authorization': 'Bearer ' + token } })
-      .then(res => res.json())
-      .then(data => {
-        setEmailRecommandations(data.email_recommandations ?? true)
-        setEmailRelanceSaga(data.email_relance_saga ?? true)
-      })
-      .finally(() => setChargement(false))
-  }, [router])
+      fetchAuth('http://localhost:3001/compte/wishlist')
+        .then(res => res ? res.json() : null)
+        .then(data => {
+          if (data === null) return
+          setWishlist(Array.isArray(data) ? data : [])
+        })
+        .catch(() => {}),
+
+      fetchAuth('http://localhost:3001/compte/preferences')
+        .then(res => res ? res.json() : null)
+        .then(data => {
+          if (!data) return
+          setEmailRecommandations(data?.email_recommandations ?? true)
+          setEmailRelanceSaga(data?.email_relance_saga ?? true)
+        })
+        .catch(() => {}),
+    ]).finally(() => setChargement(false))
+  }, [router, fetchAuth, deconnecter])
 
   async function chargerRecommandations() {
-    const token = localStorage.getItem('clientToken')
-    if (!token) return
     setChargementReco(true)
     try {
-      const res = await fetch('http://localhost:3001/api/recommandations', { headers: { 'Authorization': 'Bearer ' + token } })
+      const res = await fetchAuth('http://localhost:3001/api/recommandations')
+      if (!res) return
       const data = await res.json()
-      if (data.recommandations) setRecommandations(data.recommandations)
+      if (Array.isArray(data?.recommandations)) setRecommandations(data.recommandations)
     } catch {}
     setChargementReco(false)
     setRecoChargees(true)
   }
 
   async function sauvegarderPreferences() {
-    const token = localStorage.getItem('clientToken')
-    if (!token) return
     setSavingPrefs(true)
     try {
-      await fetch('http://localhost:3001/compte/preferences', {
+      const res = await fetchAuth('http://localhost:3001/compte/preferences', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email_recommandations: emailRecommandations, email_relance_saga: emailRelanceSaga }),
       })
+      if (!res) return
       setPrefsSaved(true)
       setTimeout(() => setPrefsSaved(false), 3000)
     } catch {}
@@ -92,8 +112,8 @@ export default function Dashboard() {
   }
 
   async function retirerWishlist(livre_id: number) {
-    const token = localStorage.getItem('clientToken')
-    await fetch('http://localhost:3001/compte/wishlist/' + livre_id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + token } })
+    const res = await fetchAuth('http://localhost:3001/compte/wishlist/' + livre_id, { method: 'DELETE' })
+    if (!res) return
     setWishlist(wishlist.filter(w => w.livre_id !== livre_id))
   }
 
@@ -157,7 +177,7 @@ export default function Dashboard() {
             <p style={{ color: C.texteSecondaire, fontSize: '13px', letterSpacing: '2px', margin: '0 0 6px', fontFamily: FONT }}>Espace client</p>
             <h1 style={{ fontSize: '32px', fontWeight: '700', color: C.texte, margin: 0, fontFamily: FONT }}>Bonjour, {client?.prenom}</h1>
             <p style={{ fontSize: '15px', color: C.texteSecondaire, margin: '6px 0 8px', fontFamily: FONT }}>{client?.email}</p>
-            <button onClick={() => { localStorage.removeItem('clientToken'); localStorage.removeItem('clientInfo'); window.location.href = '/' }}
+            <button onClick={() => deconnecter()}
               style={{ backgroundColor: 'transparent', border: `1px solid ${C.texteSecondaire}`, color: C.texteSecondaire, fontSize: '13px', cursor: 'pointer', fontFamily: FONT, padding: '6px 16px', borderRadius: '40px' }}>
               Déconnexion
             </button>
