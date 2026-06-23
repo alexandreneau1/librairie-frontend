@@ -35,6 +35,9 @@ export default function Dashboard() {
   const [chargementReco, setChargementReco] = useState(false)
   const [recoChargees, setRecoChargees] = useState(false)
 
+  const [rapprochement, setRapprochement] = useState<{ client_id: number; nb_achats: number } | null>(null)
+  const [rapprochementVisible, setRapprochementVisible] = useState(false)
+
   // Préférences emails
   const [emailRecommandations, setEmailRecommandations] = useState(true)
   const [emailRelanceSaga, setEmailRelanceSaga] = useState(true)
@@ -52,6 +55,16 @@ export default function Dashboard() {
     } catch {
       deconnecter()
       return
+    }
+
+    if (!sessionStorage.getItem('rapprochementFerme')) {
+      const stored = localStorage.getItem('rapprochementPropose')
+      if (stored) {
+        try {
+          setRapprochement(JSON.parse(stored))
+          setRapprochementVisible(true)
+        } catch {}
+      }
     }
 
     Promise.all([
@@ -83,6 +96,33 @@ export default function Dashboard() {
         .catch(() => {}),
     ]).finally(() => setChargement(false))
   }, [router, fetchAuth, deconnecter])
+
+  async function confirmerRapprochement(accepte: boolean) {
+    if (!rapprochement) return
+    await fetchAuth('http://localhost:3001/compte/rapprochement/confirmer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ client_id: rapprochement.client_id, accepte }),
+    })
+    localStorage.removeItem('rapprochementPropose')
+    setRapprochementVisible(false)
+    if (accepte) {
+      fetchAuth('http://localhost:3001/compte/historique')
+        .then(res => res ? res.json() : null)
+        .then(data => {
+          if (!data) return
+          setCommandes(Array.isArray(data?.commandes) ? data.commandes : [])
+          setReservations(Array.isArray(data?.reservations) ? data.reservations : [])
+          setVentes(Array.isArray(data?.ventes) ? data.ventes : [])
+        })
+        .catch(() => {})
+    }
+  }
+
+  function fermerBandeauSession() {
+    sessionStorage.setItem('rapprochementFerme', '1')
+    setRapprochementVisible(false)
+  }
 
   async function chargerRecommandations() {
     setChargementReco(true)
@@ -195,6 +235,30 @@ export default function Dashboard() {
             </div>
           )}
         </div>
+
+        {/* Bandeau rapprochement magasin ↔ web */}
+        {rapprochementVisible && rapprochement && (
+          <div style={{ backgroundColor: C.fondAlt, border: `1px solid ${C.or}`, borderRadius: '14px', padding: '20px 24px', marginBottom: '32px', position: 'relative', fontFamily: FONT }}>
+            <button onClick={fermerBandeauSession}
+              style={{ position: 'absolute', top: '12px', right: '16px', background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: C.texteSecondaire }}>
+              ✕
+            </button>
+            <p style={{ fontSize: '13px', color: C.vert, fontWeight: '700', letterSpacing: '1px', margin: '0 0 6px', fontFamily: FONT }}>HISTORIQUE MAGASIN</p>
+            <p style={{ fontSize: '16px', color: C.texte, margin: '0 0 16px', fontFamily: FONT }}>
+              Nous avons trouvé <strong>{rapprochement.nb_achats} achat{rapprochement.nb_achats > 1 ? 's' : ''}</strong> à votre nom en magasin — voulez-vous les ajouter à votre historique ?
+            </p>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <button onClick={() => confirmerRapprochement(true)}
+                style={{ padding: '10px 24px', backgroundColor: C.vert, color: 'white', border: 'none', borderRadius: '40px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: FONT }}>
+                Oui, ajouter mon historique
+              </button>
+              <button onClick={() => confirmerRapprochement(false)}
+                style={{ padding: '10px 24px', backgroundColor: 'white', color: C.texteSecondaire, border: `1px solid ${C.texteSecondaire}`, borderRadius: '40px', fontSize: '14px', cursor: 'pointer', fontFamily: FONT }}>
+                Non, garder séparé
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Recommandations IA */}
         <div style={{ backgroundColor: C.vert, borderRadius: '16px', padding: '28px 32px', marginBottom: '40px' }}>

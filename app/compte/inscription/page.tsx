@@ -80,7 +80,12 @@ export default function Inscription() {
       })
       const data = await res.json()
       if (!res.ok) setErreur(data.message || "Erreur lors de l'inscription")
-      else router.push('/compte/connexion')
+      else {
+        if (data.rapprochement_propose) {
+          localStorage.setItem('rapprochementPropose', JSON.stringify(data.rapprochement_propose))
+        }
+        router.push('/compte/connexion')
+      }
     } catch {
       setErreur('Impossible de contacter le serveur')
     } finally {
