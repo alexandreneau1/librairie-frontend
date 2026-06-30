@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import Header from '../../components/Header'
 import { ajouterAuPanier, estDansPanier, getPanier } from '../../lib/panier'
 
@@ -69,6 +69,19 @@ const ETAPES = [
   },
 ]
 
+// Type brut renvoyé par /livres
+type CatalogueLivre = {
+  id: number
+  titre: string
+  auteur: string
+  isbn: string
+  prix: number
+  stock: number
+  genre: string
+  description?: string
+}
+
+// Format normalisé attendu par CarteLivre
 type SelectionLivre = {
   id: number
   livre_id: number
@@ -91,10 +104,7 @@ type Selections = {
 
 const SELECTIONS_VIDES: Selections = { coups_de_coeur: [], prix: [], top_ventes: [] }
 
-// ── Cache module-level ────────────────────────────────────────────────────────
-// Persiste pour toute la durée de vie du bundle JS.
-// NE PAS utiliser dans useState() — mismatch SSR/client.
-// Lire uniquement dans useEffect().
+// ── Cache module-level pour les sélections ────────────────────────────────────
 let _moduleCache: Selections | null = null
 
 function lireCache(): Selections | null {
@@ -111,7 +121,7 @@ function ecrireCache(d: Selections) {
   try { sessionStorage.setItem('bookdog_selections', JSON.stringify(d)) } catch {}
 }
 
-// ── Trophée SVG ───────────────────────────────────────────────────────────────
+// ── SVG badges ────────────────────────────────────────────────────────────────
 type Badge = { type: 'coeur' | 'trophee' | 'prix'; label?: string | null; rang?: number | null }
 
 function TrophéeSVG({ rang, taille = 44 }: { rang: number; taille?: number }) {
@@ -224,30 +234,32 @@ function CarteLivre({ livre, badges, clientConnecte, wishlistIds, onWishlist }: 
   }
 
   return (
-    <a href={`/livres/${livre.livre_id}`} style={{ textDecoration: 'none', flexShrink: 0, width: '170px', display: 'flex', flexDirection: 'column' }}>
+    <a href={`/livres/${livre.livre_id}`} style={{ textDecoration: 'none', width: '100%', display: 'flex', flexDirection: 'column' }}>
 
-      {/* Badges au-dessus de l'image */}
-      {badges.length > 1 && <BadgesMultiples badges={badges} />}
-      {badgeUnique?.type === 'trophee' && badgeUnique.rang && (
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '6px' }}>
-          <TrophéeSVG rang={badgeUnique.rang} />
-        </div>
-      )}
-      {badgeUnique?.type === 'coeur' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', padding: '0 2px' }}>
-          <span style={{ fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>❤️</span>
-          <p style={{ color: C.vert, fontSize: '13px', fontWeight: '700', margin: 0, lineHeight: '1.2', fontStyle: 'italic' }}>{badgeUnique.label}</p>
-        </div>
-      )}
-      {badgeUnique?.type === 'prix' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', padding: '0 2px' }}>
-          <LauriersSVG taille={36} />
-          <p style={{ color: '#2D6347', fontSize: '12px', fontWeight: '700', margin: 0, lineHeight: '1.2', fontStyle: 'italic' }}>{badgeUnique.label || 'Prix littéraire'}</p>
-        </div>
-      )}
+      {/* Zone badges — hauteur fixe pour aligner toutes les images */}
+      <div style={{ minHeight: '56px', display: 'flex', alignItems: 'flex-end', justifyContent: 'flex-start', marginBottom: '8px' }}>
+        {badges.length > 1 && <BadgesMultiples badges={badges} />}
+        {badgeUnique?.type === 'trophee' && badgeUnique.rang && (
+          <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
+            <TrophéeSVG rang={badgeUnique.rang} />
+          </div>
+        )}
+        {badgeUnique?.type === 'coeur' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 2px' }}>
+            <span style={{ fontSize: '16px', lineHeight: 1, flexShrink: 0 }}>❤️</span>
+            <p style={{ color: C.vert, fontSize: '13px', fontWeight: '700', margin: 0, lineHeight: '1.2', fontStyle: 'italic', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{badgeUnique.label}</p>
+          </div>
+        )}
+        {badgeUnique?.type === 'prix' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 2px' }}>
+            <LauriersSVG taille={32} />
+            <p style={{ color: '#2D6347', fontSize: '12px', fontWeight: '700', margin: 0, lineHeight: '1.2', fontStyle: 'italic', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{badgeUnique.label || 'Prix littéraire'}</p>
+          </div>
+        )}
+      </div>
 
       {/* Image */}
-      <div style={{ width: '170px', height: '240px', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', backgroundColor: C.fondAlt, marginBottom: '10px', flexShrink: 0 }}>
+      <div style={{ width: '100%', aspectRatio: '170 / 240', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.15)', backgroundColor: C.fondAlt, marginBottom: '10px' }}>
         {imgOk ? (
           <img src={couverture} alt={livre.titre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setImgOk(false)} />
         ) : (
@@ -284,55 +296,11 @@ function CarteLivre({ livre, badges, clientConnecte, wishlistIds, onWishlist }: 
   )
 }
 
-// ── Carousel ──────────────────────────────────────────────────────────────────
-function SectionCarousel({ titre, sousTitre, livres, badgesMap, clientConnecte, wishlistIds, onWishlist, accentColor }: {
-  titre: string
-  sousTitre?: string
-  livres: SelectionLivre[]
-  badgesMap: Map<number, Badge[]>
-  clientConnecte: boolean
-  wishlistIds: Set<number>
-  onWishlist: (id: number, inList: boolean) => void
-  accentColor?: string
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  if (!livres || livres.length === 0) return null
-  const scroll = (dir: 'left' | 'right') => scrollRef.current?.scrollBy({ left: dir === 'right' ? 400 : -400, behavior: 'smooth' })
-
-  return (
-    <div style={{ marginBottom: '48px' }}>
-      {titre && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '16px', borderBottom: `2px solid ${accentColor || C.vert}`, paddingBottom: '10px' }}>
-          <div>
-            <h2 style={{ fontSize: '18px', fontWeight: '700', color: C.texte, margin: '0 0 2px' }}>{titre}</h2>
-            {sousTitre && <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: 0 }}>{sousTitre}</p>}
-          </div>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button onClick={() => scroll('left')} style={{ width: '30px', height: '30px', borderRadius: '50%', border: '1px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.texteSecondaire }}>‹</button>
-            <button onClick={() => scroll('right')} style={{ width: '30px', height: '30px', borderRadius: '50%', border: '1px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.texteSecondaire }}>›</button>
-          </div>
-        </div>
-      )}
-      {!titre && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginBottom: '12px' }}>
-          <button onClick={() => scroll('left')} style={{ width: '30px', height: '30px', borderRadius: '50%', border: '1px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.texteSecondaire }}>‹</button>
-          <button onClick={() => scroll('right')} style={{ width: '30px', height: '30px', borderRadius: '50%', border: '1px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.texteSecondaire }}>›</button>
-        </div>
-      )}
-      <div ref={scrollRef} style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '8px', scrollbarWidth: 'none' }}>
-        {livres.map(l => (
-          <CarteLivre key={l.id} livre={l} badges={badgesMap.get(l.livre_id) || []} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={onWishlist} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function Livres() {
-  // Toujours initialisé à vide — identique serveur et client, zéro mismatch
+  const [catalogue, setCatalogue] = useState<CatalogueLivre[]>([])
+  const [catalogueLoaded, setCatalogueLoaded] = useState(false)
   const [selections, setSelections] = useState<Selections>(SELECTIONS_VIDES)
-  const [loaded, setLoaded] = useState(false)
   const [wishlistIds, setWishlistIds] = useState<Set<number>>(new Set())
   const [clientConnecte, setClientConnecte] = useState(false)
   const [panelVisible, setPanelVisible] = useState(true)
@@ -354,7 +322,6 @@ export default function Livres() {
   useEffect(() => {
     if (localStorage.getItem('bookdog_panel_visible') === 'false') setPanelVisible(false)
 
-    // Lire le genre depuis l'URL (?genre=Policier)
     const params = new URLSearchParams(window.location.search)
     const genreUrl = params.get('genre')
     if (genreUrl) setGenreFiltre(decodeURIComponent(genreUrl))
@@ -368,23 +335,24 @@ export default function Livres() {
         .catch(() => {})
     }
 
-    // Lecture du cache module dans useEffect — côté client uniquement, zéro mismatch
+    // Fetch catalogue complet
+    fetch('http://localhost:3001/livres')
+      .then(r => r.json())
+      .then(data => {
+        setCatalogue(Array.isArray(data) ? data : [])
+        setCatalogueLoaded(true)
+      })
+      .catch(() => setCatalogueLoaded(true))
+
+    // Fetch sélections (pour les badges uniquement)
     const cached = lireCache()
     if (cached) {
       setSelections(cached)
-      setLoaded(true)
     } else {
       fetch('http://localhost:3001/selections')
         .then(r => r.json())
-        .then(d => {
-          ecrireCache(d)
-          setSelections(d)
-          setLoaded(true)
-        })
-        .catch(() => {
-          setSelections(SELECTIONS_VIDES)
-          setLoaded(true)
-        })
+        .then(d => { ecrireCache(d); setSelections(d) })
+        .catch(() => {})
     }
   }, [])
 
@@ -423,14 +391,30 @@ export default function Livres() {
     }
   }
 
-  const filtrerLivres = (livres: SelectionLivre[]) => {
-    if (!genreFiltre && !recherche) return livres
-    return livres.filter(l => {
-      const matchGenre = genreFiltre ? l.livre_genre === genreFiltre : true
-      const matchRecherche = recherche ? l.titre.toLowerCase().includes(recherche.toLowerCase()) || l.auteur.toLowerCase().includes(recherche.toLowerCase()) : true
-      return matchGenre && matchRecherche
-    })
+  // Construit le badgesMap à partir des sélections (clé = livre_id)
+  const badgesMap = new Map<number, Badge[]>()
+  const ajouterBadge = (l: SelectionLivre, badge: Badge) => {
+    badgesMap.set(l.livre_id, [...(badgesMap.get(l.livre_id) || []), badge])
   }
+  selections.coups_de_coeur.forEach(l => ajouterBadge(l, { type: 'coeur', label: l.label }))
+  selections.top_ventes.forEach(l => ajouterBadge(l, { type: 'trophee', rang: l.rang, label: l.label }))
+  selections.prix.forEach(l => ajouterBadge(l, { type: 'prix', label: l.label }))
+
+  // Normalise un CatalogueLivre vers SelectionLivre pour CarteLivre
+  const normaliser = (l: CatalogueLivre): SelectionLivre => ({
+    id: l.id, livre_id: l.id, type: '', label: null, rang: null,
+    titre: l.titre, auteur: l.auteur, isbn: l.isbn,
+    prix: l.prix, stock: l.stock, livre_genre: l.genre,
+  })
+
+  // Filtre sur le catalogue complet (genre = champ natif du catalogue)
+  const catalogueFiltré = catalogue.filter(l => {
+    const matchGenre = genreFiltre ? l.genre === genreFiltre : true
+    const matchRecherche = recherche
+      ? l.titre.toLowerCase().includes(recherche.toLowerCase()) || l.auteur.toLowerCase().includes(recherche.toLowerCase())
+      : true
+    return matchGenre && matchRecherche
+  })
 
   const sidebarCard: React.CSSProperties = { backgroundColor: 'white', borderRadius: '12px', padding: '20px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', marginBottom: '12px' }
   const sectionLabel: React.CSSProperties = { fontSize: '11px', color: C.texteSecondaire, letterSpacing: '1.5px', margin: '0 0 12px', fontWeight: '600' }
@@ -441,6 +425,7 @@ export default function Livres() {
       <Header pageCourante="livres" />
       <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px 80px', boxSizing: 'border-box' }}>
 
+        {/* Wizard */}
         <div style={{ marginBottom: '32px' }}>
           {panelVisible ? (
             <div style={{ backgroundColor: C.vert, borderRadius: '12px', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -499,6 +484,8 @@ export default function Livres() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '32px', alignItems: 'start' }}>
+
+          {/* Sidebar filtres */}
           <div style={{ position: 'sticky', top: '24px' }}>
             <div style={sidebarCard}>
               <input type="text" placeholder="Titre, auteur..." value={recherche} onChange={e => setRecherche(e.target.value)}
@@ -524,46 +511,43 @@ export default function Livres() {
                 </button>
               )}
             </div>
-            <a href="/livres/catalogue" style={{ display: 'block', textAlign: 'center', padding: '10px', backgroundColor: 'white', border: `1px solid ${C.vert}`, borderRadius: '10px', color: C.vert, textDecoration: 'none', fontSize: '13px', fontWeight: '700' }}>
+            <a href="/livres" style={{ display: 'block', textAlign: 'center', padding: '10px', backgroundColor: 'white', border: `1px solid ${C.vert}`, borderRadius: '10px', color: C.vert, textDecoration: 'none', fontSize: '13px', fontWeight: '700' }}>
               Voir tout le catalogue →
             </a>
           </div>
 
+          {/* Grille catalogue */}
           <div>
-            {!loaded ? (
-              <div style={{ textAlign: 'center', padding: '60px 0', color: C.texteSecondaire }}>Chargement des sélections...</div>
+            {!catalogueLoaded ? (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: C.texteSecondaire }}>Chargement du catalogue...</div>
+            ) : catalogue.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '80px 0' }}>
+                <p style={{ fontSize: '40px', marginBottom: '12px' }}>📚</p>
+                <p style={{ color: C.texteSecondaire, fontSize: '16px', margin: '0 0 8px' }}>Aucun livre dans le catalogue</p>
+                <p style={{ color: '#bbb', fontSize: '13px' }}>Ajoutez des livres depuis le dashboard admin</p>
+              </div>
+            ) : catalogueFiltré.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '80px 0' }}>
+                <p style={{ fontSize: '40px', marginBottom: '12px' }}>🔍</p>
+                <p style={{ color: C.texteSecondaire, fontSize: '16px', margin: '0 0 16px' }}>Aucun livre ne correspond à votre recherche</p>
+                <button onClick={() => { changerGenre(''); setRecherche('') }}
+                  style={{ padding: '10px 24px', backgroundColor: C.vert, color: 'white', border: 'none', borderRadius: '40px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
+                  Réinitialiser les filtres
+                </button>
+              </div>
             ) : (
-              <>
-                {(() => {
-                  const badgesMap = new Map<number, Badge[]>()
-                  const ajouter = (l: SelectionLivre, badge: Badge) => {
-                    const existing = badgesMap.get(l.livre_id) || []
-                    badgesMap.set(l.livre_id, [...existing, badge])
-                  }
-                  selections.coups_de_coeur.forEach(l => ajouter(l, { type: 'coeur', label: l.label }))
-                  selections.top_ventes.forEach(l => ajouter(l, { type: 'trophee', rang: l.rang, label: l.label }))
-                  selections.prix.forEach(l => ajouter(l, { type: 'prix', label: l.label }))
-
-                  // Dédoublonner par livre_id pour n'afficher chaque livre qu'une fois
-                  const vus = new Set<number>()
-                  const tousLesLivres: SelectionLivre[] = []
-                  ;[...selections.coups_de_coeur, ...selections.top_ventes, ...selections.prix].forEach(l => {
-                    if (!vus.has(l.livre_id)) { vus.add(l.livre_id); tousLesLivres.push(l) }
-                  })
-
-                  const livresFiltres = filtrerLivres(tousLesLivres)
-
-                  if (livresFiltres.length === 0) return (
-                    <div style={{ textAlign: 'center', padding: '80px 0' }}>
-                      <p style={{ fontSize: '40px', marginBottom: '12px' }}>📚</p>
-                      <p style={{ color: C.texteSecondaire, fontSize: '16px', margin: '0 0 8px' }}>Aucune sélection pour le moment</p>
-                      <p style={{ color: '#bbb', fontSize: '13px' }}>Ajoutez des livres depuis le dashboard admin → onglet Sélections</p>
-                    </div>
-                  )
-
-                  return <SectionCarousel titre="" livres={livresFiltres} badgesMap={badgesMap} clientConnecte={clientConnecte} wishlistIds={wishlistIds} onWishlist={toggleWishlist} accentColor="transparent" />
-                })()}
-              </>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '24px' }}>
+                {catalogueFiltré.map(l => (
+                  <CarteLivre
+                    key={l.id}
+                    livre={normaliser(l)}
+                    badges={badgesMap.get(l.id) || []}
+                    clientConnecte={clientConnecte}
+                    wishlistIds={wishlistIds}
+                    onWishlist={toggleWishlist}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </div>

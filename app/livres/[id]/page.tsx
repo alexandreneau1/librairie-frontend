@@ -80,6 +80,9 @@ export default function FicheLivre() {
   const [monCommentaire, setMonCommentaire] = useState('')
   const [avisEnvoye, setAvisEnvoye] = useState(false)
   const [erreurAvis, setErreurAvis] = useState('')
+  const [avisPublic, setAvisPublic] = useState(true)
+  const [avisDateDebut, setAvisDateDebut] = useState('')
+  const [avisDateFin, setAvisDateFin] = useState('')
 
   useEffect(() => {
     fetch(`http://localhost:3001/livres/${id}`)
@@ -166,7 +169,13 @@ export default function FicheLivre() {
     const res = await fetch(`http://localhost:3001/avis/${id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ note: maNote, commentaire: monCommentaire }),
+      body: JSON.stringify({
+        note: maNote,
+        commentaire: monCommentaire,
+        public: avisPublic,
+        date_debut: avisDateDebut || null,
+        date_fin: avisDateFin || null,
+      }),
     })
     const data = await res.json()
     if (res.ok) {
@@ -296,6 +305,23 @@ export default function FicheLivre() {
                     {[1,2,3,4,5].map(i => <button key={i} onClick={() => setMaNote(i)} style={{ fontSize: '24px', background: 'none', border: 'none', cursor: 'pointer', color: i <= maNote ? C.or : '#ccc', padding: '0' }}>★</button>)}
                   </div>
                   <textarea value={monCommentaire} onChange={e => setMonCommentaire(e.target.value)} placeholder="Votre commentaire (optionnel)..." rows={3} style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', fontFamily: 'Georgia, serif', resize: 'vertical' }} />
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', color: C.texteSecondaire, marginBottom: '6px' }}>Début de lecture</label>
+                      <input type="date" value={avisDateDebut} onChange={e => setAvisDateDebut(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '13px', boxSizing: 'border-box', fontFamily: 'Georgia, serif' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', color: C.texteSecondaire, marginBottom: '6px' }}>Fin de lecture</label>
+                      <input type="date" value={avisDateFin} onChange={e => setAvisDateFin(e.target.value)} style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '13px', boxSizing: 'border-box', fontFamily: 'Georgia, serif' }} />
+                    </div>
+                  </div>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px', fontSize: '13px', color: C.texte, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={avisPublic} onChange={e => setAvisPublic(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                    Rendre cet avis public sur la fiche du livre
+                  </label>
+
                   {erreurAvis && <p style={{ color: '#c0392b', fontSize: '13px', margin: '8px 0 0' }}>{erreurAvis}</p>}
                   <button onClick={handleAvis} style={{ marginTop: '12px', padding: '10px 24px', backgroundColor: C.vert, color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: '600', cursor: 'pointer' }}>Publier mon avis</button>
                 </div>

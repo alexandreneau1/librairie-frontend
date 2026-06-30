@@ -19,12 +19,14 @@ type WishlistItem = { id: number; livre_id: number; titre: string; auteur: strin
 type Recommandation = { livre_id: number; titre: string; auteur: string; genre: string; prix: number; raison: string }
 type CE = { id: number; nom: string; code: string; remise: number; adresse_livraison: string | null }
 type ClientInfo = { nom: string; prenom: string; email: string; ce?: CE | null }
+type Fiche = { id: number; livre_id: number; titre: string; auteur: string; isbn: string; note: number; commentaire: string | null; public: boolean; date_debut: string | null; date_fin: string | null; date_avis: string }
+type LivreRecherche = { id: number; titre: string; auteur: string }
 
 export default function Dashboard() {
   const router = useRouter()
   const { fetchAuth, deconnecter } = useFetchAuth()
 
-  const [onglet, setOnglet] = useState<'commandes' | 'reservations' | 'achats' | 'wishlist' | 'preferences'>('commandes')
+  const [onglet, setOnglet] = useState<'commandes' | 'reservations' | 'achats' | 'wishlist' | 'lectures' | 'preferences'>('commandes')
   const [client, setClient] = useState<ClientInfo | null>(null)
   const [commandes, setCommandes] = useState<Commande[]>([])
   const [reservations, setReservations] = useState<Reservation[]>([])
@@ -37,6 +39,21 @@ export default function Dashboard() {
 
   const [rapprochement, setRapprochement] = useState<{ client_id: number; nb_achats: number } | null>(null)
   const [rapprochementVisible, setRapprochementVisible] = useState(false)
+
+  // Fiches de lecture
+  const [fiches, setFiches] = useState<Fiche[]>([])
+  const [formOuvert, setFormOuvert] = useState(false)
+  const [ficheEnEdition, setFicheEnEdition] = useState<Fiche | null>(null)
+  const [rechercheTitre, setRechercheTitre] = useState('')
+  const [resultatsRecherche, setResultatsRecherche] = useState<LivreRecherche[]>([])
+  const [livreSelectionne, setLivreSelectionne] = useState<LivreRecherche | null>(null)
+  const [formNote, setFormNote] = useState(0)
+  const [formCommentaire, setFormCommentaire] = useState('')
+  const [formPublic, setFormPublic] = useState(false)
+  const [formDateDebut, setFormDateDebut] = useState('')
+  const [formDateFin, setFormDateFin] = useState('')
+  const [formErreur, setFormErreur] = useState('')
+  const [formEnvoi, setFormEnvoi] = useState(false)
 
   // Préférences emails
   const [emailRecommandations, setEmailRecommandations] = useState(true)
@@ -94,6 +111,14 @@ export default function Dashboard() {
           setEmailRelanceSaga(data?.email_relance_saga ?? true)
         })
         .catch(() => {}),
+
+      fetchAuth('http://localhost:3001/avis/mes-fiches')
+        .then(res => res ? res.json() : null)
+        .then(data => {
+          if (data === null) return
+          setFiches(Array.isArray(data) ? data : [])
+        })
+        .catch(() => {}),
     ]).finally(() => setChargement(false))
   }, [router, fetchAuth, deconnecter])
 
@@ -122,6 +147,139 @@ export default function Dashboard() {
   function fermerBandeauSession() {
     sessionStorage.setItem('rapprochementFerme', '1')
     setRapprochementVisible(false)
+  }
+
+  // Recherche de livre débouncée (formulaire "Ajouter une lecture")
+  useEffect(() => {
+    if (!formOuvert || ficheEnEdition || rechercheTitre.trim().length < 2) {
+      setResultatsRecherche([])
+      return
+    }
+    const handle = setTimeout(() => {
+      fetch(`http://localhost:3001/livres?titre=${encodeURIComponent(rechercheTitre.trim())}`)
+        .then(r => r.json())
+        .then(data => setResultatsRecherche(Array.isArray(data) ? data.slice(0, 8) : []))
+        .catch(() => {})
+    }, 300)
+    return () => clearTimeout(handle)
+  }, [rechercheTitre, formOuvert, ficheEnEdition])
+
+  function ouvrirAjoutLecture() {
+    setFicheEnEdition(null)
+    setLivreSelectionne(null)
+    setRechercheTitre('')
+    setResultatsRecherche([])
+    setFormNote(0)
+    setFormCommentaire('')
+    setFormPublic(false)
+    setFormDateDebut('')
+    setFormDateFin('')
+    setFormErreur('')
+    setFormOuvert(true)
+  }
+
+  function ouvrirEditionFiche(fiche: Fiche) {
+    setFicheEnEdition(fiche)
+    setLivreSelectionne({ id: fiche.livre_id, titre: fiche.titre, auteur: fiche.auteur })
+    setFormNote(fiche.note)
+    setFormCommentaire(fiche.commentaire || '')
+    setFormPublic(fiche.public)
+    setFormDateDebut(fiche.date_debut ? fiche.date_debut.slice(0, 10) : '')
+    setFormDateFin(fiche.date_fin ? fiche.date_fin.slice(0, 10) : '')
+    setFormErreur('')
+    setFormOuvert(true)
+  }
+
+  function selectionnerLivreRecherche(livre: LivreRecherche) {
+    const ficheExistante = fiches.find(f => f.livre_id === livre.id)
+    if (ficheExistante) {
+      ouvrirEditionFiche(ficheExistante)
+    } else {
+      setLivreSelectionne(livre)
+      setResultatsRecherche([])
+      setRechercheTitre('')
+    }
+  }
+
+  function fermerFormulaireLecture() {
+    setFormOuvert(false)
+    setFicheEnEdition(null)
+    setLivreSelectionne(null)
+  }
+
+  async function enregistrerFiche() {
+    if (!livreSelectionne) { setFormErreur('Sélectionnez un livre.'); return }
+    if (formNote === 0) { setFormErreur('Veuillez sélectionner une note.'); return }
+    setFormEnvoi(true)
+    setFormErreur('')
+    const body = JSON.stringify({
+      note: formNote,
+      commentaire: formCommentaire || null,
+      public: formPublic,
+      date_debut: formDateDebut || null,
+      date_fin: formDateFin || null,
+    })
+    try {
+      const url = ficheEnEdition
+        ? `http://localhost:3001/avis/${ficheEnEdition.id}`
+        : `http://localhost:3001/avis/${livreSelectionne.id}`
+      const res = await fetchAuth(url, {
+        method: ficheEnEdition ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      })
+      if (!res) return
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setFormErreur(data?.message || 'Erreur lors de l\'enregistrement.')
+        return
+      }
+      const saved = await res.json()
+      const ficheMaj: Fiche = {
+        ...saved,
+        titre: livreSelectionne.titre,
+        auteur: livreSelectionne.auteur,
+        isbn: ficheEnEdition?.isbn || '',
+      }
+      setFiches(prev => {
+        const sansCelle = prev.filter(f => f.id !== ficheMaj.id)
+        return [ficheMaj, ...sansCelle]
+      })
+      fermerFormulaireLecture()
+    } catch {
+      setFormErreur('Impossible de contacter le serveur.')
+    } finally {
+      setFormEnvoi(false)
+    }
+  }
+
+  async function toggleFichePublique(fiche: Fiche) {
+    const res = await fetchAuth(`http://localhost:3001/avis/${fiche.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        note: fiche.note,
+        commentaire: fiche.commentaire,
+        public: !fiche.public,
+        date_debut: fiche.date_debut,
+        date_fin: fiche.date_fin,
+      }),
+    })
+    if (!res || !res.ok) return
+    setFiches(prev => prev.map(f => f.id === fiche.id ? { ...f, public: !f.public } : f))
+  }
+
+  async function supprimerFiche(id: number) {
+    const res = await fetchAuth(`http://localhost:3001/avis/${id}`, { method: 'DELETE' })
+    if (!res) return
+    setFiches(prev => prev.filter(f => f.id !== id))
+  }
+
+  function formatPeriodeLecture(fiche: Fiche) {
+    if (fiche.date_debut && fiche.date_fin) return `Lu du ${formatDate(fiche.date_debut)} au ${formatDate(fiche.date_fin)}`
+    if (fiche.date_fin) return `Terminé le ${formatDate(fiche.date_fin)}`
+    if (fiche.date_debut) return `Commencé le ${formatDate(fiche.date_debut)}`
+    return null
   }
 
   async function chargerRecommandations() {
@@ -188,6 +346,7 @@ export default function Dashboard() {
         ]),
     { id: 'achats',      label: 'Achats en magasin', count: ventes.length },
     { id: 'wishlist',    label: 'Wishlist',          count: wishlist.length },
+    { id: 'lectures',    label: '📖 Mes lectures',   count: fiches.length },
     { id: 'preferences', label: '⚙️ Préférences',   count: 0 },
   ]
 
@@ -438,6 +597,154 @@ export default function Dashboard() {
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <a href={`/livres/${w.livre_id}`} style={{ flex: 1, textAlign: 'center', padding: '10px', backgroundColor: C.vert, color: 'white', borderRadius: '40px', textDecoration: 'none', fontSize: '14px', fontWeight: '700', fontFamily: FONT }}>Voir le livre</a>
                         <button onClick={() => retirerWishlist(w.livre_id)} style={{ padding: '10px 14px', backgroundColor: '#fff0f0', color: '#c0392b', border: 'none', borderRadius: '40px', fontSize: '14px', cursor: 'pointer', fontFamily: FONT }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>}
+          </div>
+        )}
+
+        {/* Mes lectures */}
+        {onglet === 'lectures' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+              {!formOuvert && (
+                <button onClick={ouvrirAjoutLecture}
+                  style={{ padding: '10px 22px', backgroundColor: C.vert, color: 'white', border: 'none', borderRadius: '40px', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: FONT }}>
+                  + Ajouter une lecture
+                </button>
+              )}
+            </div>
+
+            {formOuvert && (
+              <div style={{ backgroundColor: 'white', borderRadius: '14px', padding: '28px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', marginBottom: '28px' }}>
+                <p style={{ fontSize: '16px', fontWeight: '700', color: C.vert, margin: '0 0 20px', fontFamily: FONT }}>
+                  {ficheEnEdition ? 'Modifier ma fiche de lecture' : 'Ajouter une lecture'}
+                </p>
+
+                {!livreSelectionne && (
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', color: C.texteSecondaire, marginBottom: '8px', fontFamily: FONT }}>Rechercher un livre</label>
+                    <input type="text" value={rechercheTitre} onChange={e => setRechercheTitre(e.target.value)}
+                      placeholder="Titre du livre..."
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', fontFamily: FONT }} />
+                    {resultatsRecherche.length > 0 && (
+                      <div style={{ marginTop: '10px', border: '1px solid #eee', borderRadius: '8px', overflow: 'hidden' }}>
+                        {resultatsRecherche.map(l => (
+                          <button key={l.id} onClick={() => selectionnerLivreRecherche(l)}
+                            style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', background: 'white', border: 'none', borderBottom: '1px solid #f0f0f0', cursor: 'pointer', fontFamily: FONT }}>
+                            <span style={{ fontSize: '14px', color: C.texte, fontWeight: '600' }}>{l.titre}</span>
+                            <span style={{ fontSize: '13px', color: C.texteSecondaire, fontStyle: 'italic' }}> — {l.auteur}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {livreSelectionne && (
+                  <>
+                    <div style={{ backgroundColor: C.fondAlt, borderRadius: '10px', padding: '14px 16px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                      <div>
+                        <p style={{ fontSize: '15px', fontWeight: '700', color: C.texte, margin: '0 0 2px', fontFamily: FONT }}>{livreSelectionne.titre}</p>
+                        <p style={{ fontSize: '13px', color: C.texteSecondaire, margin: 0, fontStyle: 'italic', fontFamily: FONT }}>{livreSelectionne.auteur}</p>
+                      </div>
+                      {!ficheEnEdition && (
+                        <button onClick={() => setLivreSelectionne(null)}
+                          style={{ background: 'none', border: 'none', color: C.texteSecondaire, fontSize: '13px', cursor: 'pointer', fontFamily: FONT }}>
+                          Changer
+                        </button>
+                      )}
+                    </div>
+
+                    <div style={{ marginBottom: '20px' }}>
+                      <label style={{ display: 'block', fontSize: '13px', color: C.texteSecondaire, marginBottom: '8px', fontFamily: FONT }}>Note</label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        {[1,2,3,4,5].map(i => (
+                          <button key={i} onClick={() => setFormNote(i)} style={{ fontSize: '26px', background: 'none', border: 'none', cursor: 'pointer', color: i <= formNote ? C.or : '#ccc', padding: 0 }}>★</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: '20px' }}>
+                      <label style={{ display: 'block', fontSize: '13px', color: C.texteSecondaire, marginBottom: '8px', fontFamily: FONT }}>Commentaire (optionnel)</label>
+                      <textarea value={formCommentaire} onChange={e => setFormCommentaire(e.target.value)} rows={3}
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', fontFamily: FONT, resize: 'vertical' }} />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '13px', color: C.texteSecondaire, marginBottom: '8px', fontFamily: FONT }}>Début de lecture</label>
+                        <input type="date" value={formDateDebut} onChange={e => setFormDateDebut(e.target.value)}
+                          style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', fontFamily: FONT }} />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '13px', color: C.texteSecondaire, marginBottom: '8px', fontFamily: FONT }}>Fin de lecture</label>
+                        <input type="date" value={formDateFin} onChange={e => setFormDateFin(e.target.value)}
+                          style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #ddd', fontSize: '14px', boxSizing: 'border-box', fontFamily: FONT }} />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', backgroundColor: C.fond, borderRadius: '10px', padding: '14px 16px' }}>
+                      <div>
+                        <p style={{ fontSize: '14px', fontWeight: '600', color: C.texte, margin: '0 0 2px', fontFamily: FONT }}>Rendre public</p>
+                        <p style={{ fontSize: '12px', color: C.texteSecondaire, margin: 0, fontFamily: FONT }}>Visible sur la fiche du livre par tous les visiteurs.</p>
+                      </div>
+                      <Toggle active={formPublic} onChange={setFormPublic} />
+                    </div>
+
+                    {formErreur && <p style={{ color: '#c0392b', fontSize: '13px', margin: '0 0 16px', fontFamily: FONT }}>{formErreur}</p>}
+
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <button onClick={enregistrerFiche} disabled={formEnvoi}
+                        style={{ padding: '12px 28px', backgroundColor: formEnvoi ? '#aaa' : C.vert, color: 'white', border: 'none', borderRadius: '40px', fontSize: '14px', fontWeight: '700', cursor: formEnvoi ? 'not-allowed' : 'pointer', fontFamily: FONT }}>
+                        {formEnvoi ? 'Enregistrement...' : 'Enregistrer'}
+                      </button>
+                      <button onClick={fermerFormulaireLecture}
+                        style={{ padding: '12px 28px', backgroundColor: 'white', color: C.texteSecondaire, border: `1px solid ${C.texteSecondaire}`, borderRadius: '40px', fontSize: '14px', cursor: 'pointer', fontFamily: FONT }}>
+                        Annuler
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {!livreSelectionne && (
+                  <button onClick={fermerFormulaireLecture}
+                    style={{ marginTop: '8px', background: 'none', border: 'none', color: C.texteSecondaire, fontSize: '13px', cursor: 'pointer', fontFamily: FONT }}>
+                    Annuler
+                  </button>
+                )}
+              </div>
+            )}
+
+            {fiches.length === 0 ? <EmptyState emoji="📖" texte="Aucune fiche de lecture pour le moment" />
+              : <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {fiches.map(f => (
+                    <div key={f.id} style={carteStyle}>
+                      <div>
+                        <p style={{ fontWeight: '700', fontSize: '16px', margin: '0 0 4px', color: C.texte, fontFamily: FONT }}>{f.titre}</p>
+                        <p style={{ fontSize: '14px', color: C.texteSecondaire, margin: '0 0 6px', fontStyle: 'italic', fontFamily: FONT }}>{f.auteur}</p>
+                        <span style={{ fontSize: '15px', letterSpacing: '1px' }}>
+                          {[1,2,3,4,5].map(i => <span key={i} style={{ color: i <= f.note ? C.or : '#ddd' }}>★</span>)}
+                        </span>
+                        {f.commentaire && <p style={{ fontSize: '13px', color: C.texte, margin: '8px 0 0', maxWidth: '480px', lineHeight: '1.5' }}>{f.commentaire}</p>}
+                        {formatPeriodeLecture(f) && <p style={{ fontSize: '12px', color: '#bbb', margin: '8px 0 0', fontFamily: FONT }}>{formatPeriodeLecture(f)}</p>}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                        <button onClick={() => toggleFichePublique(f)}
+                          style={{ fontSize: '12px', fontWeight: '600', padding: '4px 12px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontFamily: FONT, backgroundColor: f.public ? C.fondAlt : '#f5f5f5', color: f.public ? C.vert : C.texteSecondaire }}>
+                          {f.public ? '🌍 Public' : '🔒 Privé'}
+                        </button>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={() => ouvrirEditionFiche(f)}
+                            style={{ padding: '6px 14px', backgroundColor: 'white', color: C.vert, border: `1px solid ${C.vert}`, borderRadius: '40px', fontSize: '12px', cursor: 'pointer', fontFamily: FONT }}>
+                            Modifier
+                          </button>
+                          <button onClick={() => supprimerFiche(f.id)}
+                            style={{ padding: '6px 14px', backgroundColor: '#fff0f0', color: '#c0392b', border: 'none', borderRadius: '40px', fontSize: '12px', cursor: 'pointer', fontFamily: FONT }}>
+                            Supprimer
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
